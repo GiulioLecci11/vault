@@ -425,7 +425,9 @@ def post_policy_checking_pipeline(
         # Immediate response to the client
         return {"message": "Analysis started!"}`
 
-Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio BackgroundTasks) che però da swagger (o in generale nell'utilizzo reale) non dobbiamo passare. Poi dentro la rotta si passa il "metodo" (in questo caso policy_checking_pipeline_manager.run_policy_check) che esegue quella rotta all'interno di background_tasks.add_task come parametro e i parametri del metodo a sua volta come parametri di add_task messi posizionalmente DOPO di lui
+Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio BackgroundTasks) che però da swagger (o in generale nell'utilizzo reale) non dobbiamo passare. Poi dentro la rotta si passa il "metodo" (in questo caso policy_checking_pipeline_manager.run_policy_check) che esegue quella rotta all'interno di background_tasks.add_task come parametro e i parametri del metodo a sua volta come parametri di add_task messi posizionalmente DOPO di lui.
+
+Questo codice ci permette di lanciare il task in background, ma quando il task finisce non andrà in automatico a "sovrascrivere" la risposta analysis started, permette solo di "liberare" l'esecuzione perché è come se lanciassimo una funzione async facendo await. Siamo noi poi a dover prevedere che il codice della dipendenza usata ossia (policy_checking_pipeline_manager.run_policy_check ) infine ci reindirizzi sul risultato dell'analisi
 ## Concorrenza in Python: Thread vs. Asyncio
 
 ### Cos'è il GIL?
