@@ -350,6 +350,7 @@ L'approccio con Pydantic BaseSettings garantisce la validazione automatica delle
 ### Approccio CRUD
 
 Tutte le comunicazioni col database sono una dipendenza, ma non le usiamo direttamente dentro le rotte. Si preferisce centralizzare in un unico punto tutte le comunicazioni col db in una classe CRUD.
+***Nel file CRUD.PY puoi trovare tanti esempi di query***
 
 ### ORM e Modelli
 
@@ -359,6 +360,122 @@ Usare SQLModel (dello stesso sviluppatore di FastAPI) o SQLAlchemy. L'idea è de
 class User(DBBaseModel, table=True):
     id: int = Field(default=None, primary_key=True)
 ```
+
+Esempio di due tabelle complesse e correlate tra loro da una relazione
+  
+```python
+
+class CommercialConditionCheck(DBBaseModel, table=True):
+
+	__tablename__ = "commercial_condition_check"
+	
+	id: int = Field(default=None, primary_key=True)
+	
+	id: int = Field(default=None, primary_key=True)
+	
+	user_id: int = Field(foreign_key="user.id")
+	
+	commercial_condition_id: int
+	
+	commercial_conditions_ids: list[int] = Field(default=[])
+	
+	check_session_id: int = Field(foreign_key="check_session.id")
+	
+	overview: str = Field(default="")
+	
+	document_id: int
+	
+	commercial_conditions_details: str = Field(default="")
+	
+	outcome: CheckOutcome
+	
+	state: ReportState = Field(
+	
+	reasoning: str
+	
+	default=ReportState.pending, sa_column=Column(Enum(ReportState))
+	
+	created_at: datetime = Field(
+	default_factory=lambda: datetime.now(timezone.utc),
+	)
+	
+	updated_at: datetime | None = Field(
+	default=None, sa_column=Column(DateTime(), onupdate=func.now())
+	)
+	
+	# Relationships
+	
+	check_session: "CheckSession" = Relationship(
+	back_populates="commercial_condition_checks"
+	)
+
+
+class CheckSession(DBBaseModel, table=True):
+
+	__tablename__ = "check_session"
+	
+	id: int = Field(default=None, primary_key=True)
+	
+	user_id: int = Field(foreign_key="user.id")
+	
+	commercial_conditions_ids: List[int] = Field(
+	
+	sa_column=Column(JSON)
+	) # Sqlalchemy doesn't support List type
+	
+	document_ids: List[int] = Field(sa_column=Column(JSON))
+	
+	state: CheckSessionState = Field(default=CheckSessionState.RUNNING)
+	
+	created_at: datetime = Field(
+	default_factory=lambda: datetime.now(timezone.utc),
+	)
+	
+	updated_at: datetime | None = Field(
+	default=None, sa_column=Column(DateTime(), onupdate=func.now())
+	)
+	
+	completed_at: datetime | None = Field(default=None)
+	
+	running_checks_count: int
+	
+	compliant_checks_count: int
+	
+	not_compliant_checks_count: int
+	
+	not_found_checks_count: int
+	
+	summary_available_checks_count: int
+	
+	#Relationships
+	
+	commercial_condition_checks: List[CommercialConditionCheck] = Relationship(
+	back_populates="check_session")
+
+```
+## DOMANDE PER LEO
+1. cosa fa la rotta
+```python
+@router.get("")
+
+
+def get_commercial_conditions(
+
+current_user=Depends(dependencies.authentication_manager.get_current_user),
+) -> Dict[str, CommercialConditionDetails]:
+
+	commercial_conditions_details = dependencies.policy_checking_pipeline_manager.get_commercial_conditions_details()
+
+	return commercial_conditions_details
+```
+
+E perché l'hai spostata?
+
+2. A cosa servono i file nei models.py? Perché non metterli in db models?
+3. Mi spieghi tutto il meccanismo delle sessions che l'hai fatto da 0? è best practices? Anche qua models.py e pure bello pieno
+4. add middleware?
+5. Nota nel get check session prendi solo le vecchie sessioni di quello specifico utente
+6. minor: tutti nomi molto simili per le operazioni del db, voluto? 
 
 ### Alembic per le Migration
 
