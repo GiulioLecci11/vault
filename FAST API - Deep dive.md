@@ -403,6 +403,29 @@ Framework utile per gestire il sincronismo in maniera molto automatizzata. **UTI
 ## FastAPI background tasks:
 Come Celery, ma utile per operazioni più leggere (https://fastapi.tiangolo.com/tutorial/background-tasks/) 
 
+`from fastapi import Depends, BackgroundTasks
+
+`@router.post("/policy-checking-pipeline")`
+def post_policy_checking_pipeline(
+        body: PolicyCheckingPipelineRequest,
+        background_tasks: BackgroundTasks,
+        policy_checking_pipeline_manager=Depends(
+            lambda: dependencies.policy_checking_pipeline_manager
+        ),
+    ) -> Dict[str, str]:
+        """Start the policy checking pipeline in background and return immediately."""
+        commercial_conditions_ids = body.commercial_conditions_ids
+        analysis_mode = body.analysis_mode
+        # Start the policy checking pipeline in background
+        background_tasks.add_task(
+            policy_checking_pipeline_manager.run_policy_check,
+            commercial_conditions_ids,
+            analysis_mode,
+        )
+        # Immediate response to the client
+        return {"message": "Analysis started!"}`
+
+Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio BackgroundTasks) che però da swagger (o in generale nell'utilizzo reale) non dobbiamo passare. Poi dentro la rotta si passa il "metodo" (in questo caso policy_checking_pipeline_manager.run_policy_check) che esegue quella rotta all'interno di background_tasks.add_task come parametro e i parametri del metodo a sua volta come parametri di add_task messi posizionalmente DOPO di lui
 ## Concorrenza in Python: Thread vs. Asyncio
 
 ### Cos'è il GIL?
