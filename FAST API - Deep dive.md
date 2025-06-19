@@ -453,8 +453,12 @@ class CheckSession(DBBaseModel, table=True):
 	back_populates="check_session")
 
 ```
+
+⚠️SISTEMARE QUESTA PARTE
+## ABB examples
+- Dentro api/routes/v0 fare una rotta diversa per ogni funzionalità diversa del backend (in abb noi abbiamo /policy_check ma anche /commercial_condition per gettare tutte le policy dal db)
 ## DOMANDE PER LEO
-1. cosa fa la rotta
+1. perché hai spostato la rotta?
 ```python
 @router.get("")
 
@@ -469,13 +473,14 @@ current_user=Depends(dependencies.authentication_manager.get_current_user),
 	return commercial_conditions_details
 ```
 
-E perché l'hai spostata?
-
+	
 2. A cosa servono i file nei models.py? Perché non metterli in db models?
 3. Mi spieghi tutto il meccanismo delle sessions che l'hai fatto da 0? è best practices? Anche qua models.py e pure bello pieno
 4. add middleware?
 5. Nota nel get check session prendi solo le vecchie sessioni di quello specifico utente
 6. minor: tutti nomi molto simili per le operazioni del db, voluto? 
+7. Cosa fa backpopulates?
+8. Dove vanno messe
 
 ### Alembic per le Migration
 
