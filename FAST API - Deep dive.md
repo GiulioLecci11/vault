@@ -514,12 +514,12 @@ current_user=Depends(dependencies.authentication_manager.get_current_user),
 
 	return commercial_conditions_details
 ```
-
+R: spostare le rotte in base al pattern restful. Se ho bisogno di una risorsa diversa (come le commercial conditions, che prescindono dal policy check) faccio una rotta diversa
 	
-2. A cosa servono i file nei models.py? Perché non metterli in db models?
+2. A cosa servono i file nei models.py? Perché non metterli in db models?R: i modelli nelle rotte servono per quella specifica rotta, tipo vengono usati nelle risposte dell'utente. Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
 3. Mi spieghi tutto il meccanismo delle sessions che l'hai fatto da 0? è best practices? Anche qua models.py e pure bello pieno
-4. add middleware?
-5. Nota nel get check session prendi solo le vecchie sessioni di quello specifico utente
+4. add middleware? Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger
+5. Nota nel get check session prendi solo le vecchie sessioni di quello specifico utente, voluto.
 6. minor: tutti nomi molto simili per le operazioni del db, voluto? 
 7. Cosa fa backpopulates?
 8. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle
