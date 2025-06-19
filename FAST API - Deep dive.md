@@ -459,7 +459,9 @@ class CheckSession(DBBaseModel, table=True):
 - Dentro api/routes/v0 fare una rotta diversa per ogni funzionalità diversa del backend (in abb noi abbiamo /policy_check ma anche /commercial_condition per gettare tutte le policy dal db)
 
 - Nell'interagire col db ATTENZIONE ALLA SESSION DEL DB STESSO in quanto non si possono lanciare due get_session() di fila (ma questa funzione può essere embeddata in alcune funzioni scritte da Leo come get_check_session() o altre)
+
 Ecco un esempio di operazioni di scrittura (creazione e update) di una tabella nel db, queste operazioni stanno dentro crud.py e NON UTILIZZANO le funzioni di leo per checkare la session del database ma usiamo "a mano" get_session(). Nota che PURTROPPO abbiamo avuto la brillante idea di chiamare una run di policy check ->CheckSession quindi la nomenclatura è un po' infelice
+SISTEMA METTENDOTI NUOVA VERSIONE DI GETCHECKSESSION
 ```python
 def create_check_session(
         self,
@@ -498,7 +500,8 @@ def create_check_session(
             session.refresh(check_session)
             return check_session   
 ```
-- 
+
+
 ## DOMANDE PER LEO
 1. perché hai spostato la rotta?
 ```python
@@ -514,15 +517,13 @@ current_user=Depends(dependencies.authentication_manager.get_current_user),
 
 	return commercial_conditions_details
 ```
-R: spostare le rotte in base al pattern restful. Se ho bisogno di una risorsa diversa (come le commercial conditions, che prescindono dal policy check) faccio una rotta diversa
-	
+R: spostare le rotte in base al pattern restful. Se ho bisogno di una risorsa diversa (come le commercial conditions, che prescindono dal policy check) faccio una rotta diversa. Una rotta con "" non aggiunge nulla rispetto al path che sta nel prefix (che qui nel codice non mostro)
 2. A cosa servono i file nei models.py? Perché non metterli in db models?R: i modelli nelle rotte servono per quella specifica rotta, tipo vengono usati nelle risposte dell'utente. Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
 3. Mi spieghi tutto il meccanismo delle sessions che l'hai fatto da 0? è best practices? Anche qua models.py e pure bello pieno
 4. add middleware? Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger
-5. Nota nel get check session prendi solo le vecchie sessioni di quello specifico utente, voluto.
-6. minor: tutti nomi molto simili per le operazioni del db, voluto? 
-7. Cosa fa backpopulates?
-8. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle
+5. minor: tutti nomi molto simili per le operazioni del db. Voluto e sono leggermente diverse in quello che fanno, però si riferiscono tutte e 3 alla CheckSession (run del policyChecker) ma al loro interno chiamano pure get_session() che si riferisce alla session del db.
+6. Cosa fa backpopulates?
+7. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle
 
 ⚠️FINE PARTE DA SISTEMARE 
 ### Alembic per le Migration
@@ -568,10 +569,11 @@ Framework utile per gestire il sincronismo in maniera molto automatizzata. **UTI
 ## FastAPI background tasks:
 Come Celery, ma utile per operazioni più leggere (https://fastapi.tiangolo.com/tutorial/background-tasks/) 
 
-`from fastapi import Depends, BackgroundTasks
+```python
+from fastapi import Depends, BackgroundTasks
 
-`@router.post("/policy-checking-pipeline")`
-def post_policy_checking_pipeline(
+@router.post("/policy-checking-pipeline")
+    def post_policy_checking_pipeline(
         body: PolicyCheckingPipelineRequest,
         background_tasks: BackgroundTasks,
         policy_checking_pipeline_manager=Depends(
@@ -581,18 +583,26 @@ def post_policy_checking_pipeline(
         """Start the policy checking pipeline in background and return immediately."""
         commercial_conditions_ids = body.commercial_conditions_ids
         analysis_mode = body.analysis_mode
+        # Persist a pending Report and retrieve its id
+        report_id = dependencies.crud.create_report_record(
+            user_id=1,         # TODO: replace user_id placeholder with user info from authentication when available
+            commercial_conditions_ids=commercial_conditions_ids,
+        )
         # Start the policy checking pipeline in background
         background_tasks.add_task(
             policy_checking_pipeline_manager.run_policy_check,
             commercial_conditions_ids,
             analysis_mode,
         )
-        # Immediate response to the client
-        return {"message": "Analysis started!"}`
-
+        # Immediate response to the client including report id
+        return {"message": "Analysis started!", "report_id": report_id}
+```
+SISTEMA QUESTA PARTE⚠️
 Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio BackgroundTasks) che però da swagger (o in generale nell'utilizzo reale) non dobbiamo passare. Poi dentro la rotta si passa il "metodo" (in questo caso policy_checking_pipeline_manager.run_policy_check) che esegue quella rotta all'interno di background_tasks.add_task come parametro e i parametri del metodo a sua volta come parametri di add_task messi posizionalmente DOPO di lui.
 
 Questo codice ci permette di lanciare il task in background, ma quando il task finisce non andrà in automatico a "sovrascrivere" la risposta analysis started, permette solo di "liberare" l'esecuzione perché è come se lanciassimo una funzione async facendo await. Siamo noi poi a dover prevedere che il codice della dipendenza usata ossia (policy_checking_pipeline_manager.run_policy_check ) infine ci reindirizzi sul risultato dell'analisi
+
+SISTEMA E AGGIUNGI CHE ci facciamo tornare assieme ad analysis started anche l'id del report che sta per essere generato così da poterlo usare per richiedere esattamente quel report lì
 ## Concorrenza in Python: Thread vs. Asyncio
 
 ### Cos'è il GIL?
