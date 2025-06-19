@@ -457,6 +457,48 @@ class CheckSession(DBBaseModel, table=True):
 ⚠️SISTEMARE QUESTA PARTE
 ## ABB examples
 - Dentro api/routes/v0 fare una rotta diversa per ogni funzionalità diversa del backend (in abb noi abbiamo /policy_check ma anche /commercial_condition per gettare tutte le policy dal db)
+
+- Nell'interagire col db ATTENZIONE ALLA SESSION DEL DB STESSO in quanto non si possono lanciare due get_session() di fila (ma questa funzione può essere embeddata in alcune funzioni scritte da Leo come get_check_session() o altre)
+Ecco un esempio di operazioni di scrittura (creazione e update) di una tabella nel db, queste operazioni stanno dentro crud.py e NON UTILIZZANO le funzioni di leo per checkare la session del database ma usiamo "a mano" get_session(). Nota che PURTROPPO abbiamo avuto la brillante idea di chiamare una run di policy check ->CheckSession quindi la nomenclatura è un po' infelice
+```python
+def create_check_session(
+        self,
+        user_id: int,
+        commercial_conditions_ids: list[int],
+        document_ids: list[int],
+    ) -> CheckSession:
+        with self.db_manager.get_session() as session:
+            check_session = CheckSession(
+                user_id=user_id,
+                commercial_conditions_ids=commercial_conditions_ids,
+                document_ids=document_ids,
+            )
+            session.add(check_session)
+            session.commit()
+            session.refresh(check_session)
+            return check_session
+        
+    def update_check_session_status(
+        self,
+        session_id: int,
+        status: CheckSessionState,
+    ) -> CheckSession:
+        with self.db_manager.get_session() as session:
+            check_session = session.exec(
+                select(CheckSession).where(CheckSession.id == session_id)
+            ).first()
+            
+            if not check_session:
+                raise ResourceNotFoundException(
+                    f"Check session with id {session_id} not found"
+                )
+            check_session.state = status
+            check_session.completed_at = datetime.now()
+            session.commit()
+            session.refresh(check_session)
+            return check_session   
+```
+- 
 ## DOMANDE PER LEO
 1. perché hai spostato la rotta?
 ```python
@@ -480,7 +522,7 @@ current_user=Depends(dependencies.authentication_manager.get_current_user),
 5. Nota nel get check session prendi solo le vecchie sessioni di quello specifico utente
 6. minor: tutti nomi molto simili per le operazioni del db, voluto? 
 7. Cosa fa backpopulates?
-8. Dove vanno messe
+8. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle
 
 ⚠️FINE PARTE DA SISTEMARE 
 ### Alembic per le Migration
