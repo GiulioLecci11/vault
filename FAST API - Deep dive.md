@@ -482,6 +482,7 @@ current_user=Depends(dependencies.authentication_manager.get_current_user),
 7. Cosa fa backpopulates?
 8. Dove vanno messe
 
+⚠️FINE PARTE DA SISTEMARE 
 ### Alembic per le Migration
 
 Una migration è una modifica dello schema del database senza dover riscrivere da zero. Alembic è un framework per questo:
