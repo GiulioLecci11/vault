@@ -1,4 +1,4 @@
-## Setup iniziale e struttura base
+## FastAPI: Setup iniziale e struttura base
 
 Per iniziare con FastAPI, bisogna creare un'istanza dell'applicazione con `app = FastAPI()`. Per far partire l'applicazione è necessario importare uvicorn, che è il server ASGI ottimizzato per gestire le applicazioni asincrone.
 
@@ -345,7 +345,7 @@ settings = APISettings()
 
 L'approccio con Pydantic BaseSettings garantisce la validazione automatica delle configurazioni e una gestione type-safe delle variabili d'ambiente.
 
-## Database
+## Database (dbeaver per visualizzare file test.db)
 
 ### Approccio CRUD
 
@@ -410,6 +410,7 @@ class CommercialConditionCheck(DBBaseModel, table=True):
 	)
 
 
+
 class CheckSession(DBBaseModel, table=True):
 
 	__tablename__ = "check_session"
@@ -455,10 +456,47 @@ class CheckSession(DBBaseModel, table=True):
 ```
 
 ⚠️SISTEMARE QUESTA PARTE
-## ABB examples
-- Dentro api/routes/v0 fare una rotta diversa per ogni funzionalità diversa del backend (in abb noi abbiamo /policy_check ma anche /commercial_condition per gettare tutte le policy dal db)
+## Examples (from ABB Backend)
+- Dentro api/routes/v0 fare una rotta diversa per ogni funzionalità diversa del backend (in abb noi abbiamo /policy_check ma anche /commercial_condition per gettare tutte le policy dal db). Spostare le rotte in base al pattern REST FUL. 
+  Se ho bisogno di una risorsa diversa (come le commercial conditions, che prescindono dal policy check) faccio una rotta diversa. 
+  Una rotta con "" non aggiunge nulla rispetto al path che sta nel prefix (che qui nel codice non mostro). Esempio:
+```python
+@router.get("")
 
-- Nell'interagire col db ATTENZIONE ALLA SESSION DEL DB STESSO in quanto non si possono lanciare due get_session() di fila (ma questa funzione può essere embeddata in alcune funzioni scritte da Leo come get_check_session() o altre)
+
+def get_commercial_conditions(
+
+current_user=Depends(dependencies.authentication_manager.get_current_user),
+) -> Dict[str, CommercialConditionDetails]:
+
+	commercial_conditions_details = dependencies.policy_checking_pipeline_manager.get_commercial_conditions_details()
+
+	return commercial_conditions_details
+```
+
+- Nell'interagire col db fare ATTENZIONE ALLA SESSION DEL DB STESSO in quanto non si possono lanciare due get_session() di fila (ma questa funzione può essere embeddata in alcune funzioni scritte da Leo come get_check_session() o altre). Risolto con la seguente implementazione dove se una session è già stata definita (esternamente, con un get_session() ) la passiamo come parametro 'current_session' a get_check_session()
+```python
+def get_check_session(self, user_id: int, session_id: int, current_session = None) -> CheckSession:
+        if current_session is not None:
+            check_session = current_session.exec(
+                select(CheckSession)
+                .where(CheckSession.user_id == user_id)
+                .where(CheckSession.id == session_id)
+            ).first()
+        else:
+            with self.db_manager.get_session() as db_session:
+                check_session = db_session.exec(
+                    select(CheckSession)
+                    .where(CheckSession.user_id == user_id)
+                    .where(CheckSession.id == session_id)
+                ).first()
+                if not check_session:
+                    raise ResourceNotFoundException(
+                        f"Check session with id {session_id} not found"
+                    )
+        return check_session
+```
+  Abbiamo pure cambiato il nome della session del db in -> db_session. Mentre check_session si riferisce alla run del policy checker
 
 Ecco un esempio di operazioni di scrittura (creazione e update) di una tabella nel db, queste operazioni stanno dentro crud.py e NON UTILIZZANO le funzioni di leo per checkare la session del database ma usiamo "a mano" get_session(). Nota che PURTROPPO abbiamo avuto la brillante idea di chiamare una run di policy check ->CheckSession quindi la nomenclatura è un po' infelice
 SISTEMA METTENDOTI NUOVA VERSIONE DI GETCHECKSESSION
@@ -504,26 +542,14 @@ def create_check_session(
 
 ## DOMANDE PER LEO
 1. perché hai spostato la rotta?
-```python
-@router.get("")
 
-
-def get_commercial_conditions(
-
-current_user=Depends(dependencies.authentication_manager.get_current_user),
-) -> Dict[str, CommercialConditionDetails]:
-
-	commercial_conditions_details = dependencies.policy_checking_pipeline_manager.get_commercial_conditions_details()
-
-	return commercial_conditions_details
-```
-R: spostare le rotte in base al pattern restful. Se ho bisogno di una risorsa diversa (come le commercial conditions, che prescindono dal policy check) faccio una rotta diversa. Una rotta con "" non aggiunge nulla rispetto al path che sta nel prefix (che qui nel codice non mostro)
+R: 
 2. A cosa servono i file nei models.py? Perché non metterli in db models?R: i modelli nelle rotte servono per quella specifica rotta, tipo vengono usati nelle risposte dell'utente. Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
 3. Mi spieghi tutto il meccanismo delle sessions che l'hai fatto da 0? è best practices? Anche qua models.py e pure bello pieno
 4. add middleware? Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger
 5. minor: tutti nomi molto simili per le operazioni del db. Voluto e sono leggermente diverse in quello che fanno, però si riferiscono tutte e 3 alla CheckSession (run del policyChecker) ma al loro interno chiamano pure get_session() che si riferisce alla session del db.
-6. Cosa fa backpopulates?
-7. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle
+6. Cosa fa backpopulates? Serve ad esplicitare la foreign key non solo al db ma anche a sql model. Funziona anche senza comunque
+7. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle. SI, bravissimi
 
 ⚠️FINE PARTE DA SISTEMARE 
 ### Alembic per le Migration
@@ -603,6 +629,8 @@ Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio Back
 Questo codice ci permette di lanciare il task in background, ma quando il task finisce non andrà in automatico a "sovrascrivere" la risposta analysis started, permette solo di "liberare" l'esecuzione perché è come se lanciassimo una funzione async facendo await. Siamo noi poi a dover prevedere che il codice della dipendenza usata ossia (policy_checking_pipeline_manager.run_policy_check ) infine ci reindirizzi sul risultato dell'analisi
 
 SISTEMA E AGGIUNGI CHE ci facciamo tornare assieme ad analysis started anche l'id del report che sta per essere generato così da poterlo usare per richiedere esattamente quel report lì
+
+AGGIUNGI PURE CHE polling al db aspettando risultato e quando trovi results=done visualizzi pacchetto a frontend
 ## Concorrenza in Python: Thread vs. Asyncio
 
 ### Cos'è il GIL?
