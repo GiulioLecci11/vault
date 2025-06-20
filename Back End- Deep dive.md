@@ -570,7 +570,7 @@ alembic revision --autogenerate -m "messaggio"
 alembic upgrade head
 ```
 
-Il comando `--autogenerate` genera automaticamente il file di migration basandosi sulle differenze nei modelli.
+Il comando `--autogenerate` genera automaticamente il file di migration basandosi sulle differenze nei modelli di db_models. Basta modificare quelli.
 
 ## Redis (Caching)
 
@@ -760,9 +760,10 @@ class FileHandler:
         if not os.path.exists(self.final_path):
             os.makedirs(self.final_path)
             
-    def upload_file(self, file: UploadFile):          <- very easy
+    def upload_file(self, file: UploadFile):
         file_path = os.path.join(self.final_path, file.filename)
-        pass
+        with open(file_path, "wb") as f:
+            f.write(file.file.read())
         
     def fake_upload_file(self, file: BufferedReader): <- per test senza front end
         file_path = os.path.join(self.final_path, "fake_file.pdf")
@@ -771,8 +772,73 @@ class FileHandler:
             
     def download_file(self, file_path: str):
         pass
+        
+    def read_files(self):
+        return load_docs(self.final_path)   <- nelle utils di ABB
 ```
 
+### Per passare file non fake tramite swagger:
+
+Finora abbiamo visto la procedura per passare un fake file, dal file system del pc di Ben. Adesso vediamo come predisporre swagger per accettare un caricamento di una lista di file (esattamente come poi verranno passati dal frontend)
+In particolare va notato che NON SI PUO' più usare un singolo parametro (definito nei models della rotta) per tutti i parametri del body. In quanto alcuni di questi sono del tipo Form e altri del tipo File e i due non funzionano se messi insieme. Vediamo il file **api.py** della rotta policy_check (rotta post dove facciamo caricamento dei file e lanciamo policy_check)
+
+```python
+def create_policy_check_v0_router(dependencies: APIDependencies) -> APIRouter:
+    router = APIRouter(prefix=f"{V0_PREFIX}/policy-check")
+    @router.post("/policy-checking-pipeline")
+    
+    def run_policy_checking_pipeline(
+        background_tasks: BackgroundTasks,
+        commercial_conditions_ids: str = Form(      <- Prima stavano nel body
+            default="1,2,4", description="Comma-separated list of IDs"
+        ),
+        
+        analysis_mode: str = Form(    <- Prima nel body con un model di rotta
+            default="baseline", description="Analysis mode: baseline or router"
+        ),
+        
+        files: List[UploadFile] = File(..., description="Upload multiple files"),
+        
+        policy_checking_pipeline_manager=Depends(     SISTEMARE QUESTA PARTE⚠️ ( https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/7c5b23ec94c0bdbb1353d79b2e873bc88fbf404d ) 
+            lambda: dependencies.policy_checking_pipeline_manager
+        ),
+    ) -> Dict[str, str]: <- questo cambiato perché se torno oggetto significa che è andato tutto bene⚠️
+        """Start the policy checking pipeline in background and return immediately."""
+        
+        # Converti la stringa in lista di interi
+        commercial_conditions_ids_list = [
+            int(x.strip()) for x in commercial_conditions_ids.split(",")
+        ]
+        
+        # rimuovi l'estensione del file e cambiala in .pdf per salvare a db
+        document_ids = [file.filename.replace(file.filename.split(".")[-1], "pdf") for file in files]
+        check_session = dependencies.crud.create_check_session(
+            user_id=1,  # TODO: replace user_id placeholder with user info from authentication when available
+            commercial_conditions_ids=commercial_conditions_ids_list,
+            document_ids=document_ids,
+        )
+        
+        file_handler = FileHandler(check_session.id)
+        for file in files:
+            file_handler.upload_file(file)    <- NON PIU' FAKE
+        
+        background_tasks.add_task(
+            policy_checking_pipeline_manager.run_policy_checking_pipeline,
+            commercial_conditions_ids_list,
+            analysis_mode,
+            check_session.id,
+            dependencies.crud,
+            file_handler   <- passo file handler perché servirà dentro pipeline
+        )
+        return {
+            "message": "Analysis started!",
+            "check_session_id": str(check_session.id),
+        }
+    return router
+```
+
+
+VEDI QUESTO COMMIT https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/2b42a7bcb40b5ce2097904c50a218657807010a6 e poi ultimo https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/881987e2ec111ce037b2f4455d44aa6655137872 e probabilmente inutile https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/b1e391a85d92f46ae504414b5c0f954fdb58e620
 
 ## Concorrenza in Python: Thread vs. Asyncio
 
