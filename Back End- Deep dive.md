@@ -408,9 +408,9 @@ class CommercialConditionCheck(DBBaseModel, table=True):
 	check_session: "CheckSession" = Relationship(
 	back_populates="commercial_condition_checks"
 	)
+```
 
-
-
+```python
 class CheckSession(DBBaseModel, table=True):
 
 	__tablename__ = "check_session"
@@ -496,6 +496,8 @@ def get_check_session(self, user_id: int, session_id: int, current_session = Non
         return check_session
 ```
   Abbiamo pure cambiato il nome della session del db in -> db_session. Mentre check_session si riferisce alla run del policy checker
+  
+Considerazione su CRUD.py:tutti nomi molto simili per le operazioni del db. Voluto e sono leggermente diverse in quello che fanno, però si riferiscono tutte e 3 alla CheckSession (run del policyChecker) ma al loro interno chiamano pure get_session() che si riferisce alla session del db.
 
 Ecco un esempio di operazioni di scrittura (creazione e update) di una tabella nel db, queste operazioni stanno dentro crud.py. 
 Nota che PURTROPPO abbiamo avuto la brillante idea di chiamare una run di policy checker come CheckSession quindi la nomenclatura è un po' infelice.
@@ -533,13 +535,27 @@ def create_check_session(
 ```
 
 ⚠️DA SISTEMARE
-## DOMANDE PER LEO
+### Models.py VS Db Models
 
-2. A cosa servono i file nei models.py? Perché non metterli in db models?R: i modelli nelle rotte servono per quella specifica rotta, tipo vengono usati nelle risposte dell'utente. Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
-3. add middleware? Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger
-4. minor: tutti nomi molto simili per le operazioni del db. Voluto e sono leggermente diverse in quello che fanno, però si riferiscono tutte e 3 alla CheckSession (run del policyChecker) ma al loro interno chiamano pure get_session() che si riferisce alla session del db.
-5. Cosa fa backpopulates? Serve ad esplicitare la foreign key non solo al db ma anche a sql model. Funziona anche senza comunque
-6. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle. SI, bravissimi
+I modelli (models.py) posti all'interno delle rotte sono utilizzati per quelle specifiche rotte per esempio per formattare le risposte dell'utente (difatti nel nome presentano spesso finali come "out" o "response"). Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
+
+### Middleware
+
+Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger
+```python
+from fastapi.middleware.cors import CORSMiddleware
+
+
+app.add_middleware(
+CORSMiddleware,
+allow_origins=["*"],
+allow_credentials=True,
+allow_methods=["*"],
+allow_headers=["*"],
+)
+```
+2. Cosa fa backpopulates? Serve ad esplicitare la foreign key non solo al db ma anche a sql model. Funziona anche senza comunque
+3. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle. SI, bravissimi
 
 ⚠️FINE PARTE DA SISTEMARE 
 ### Alembic per le Migration
