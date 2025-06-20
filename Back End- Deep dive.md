@@ -454,7 +454,7 @@ class CheckSession(DBBaseModel, table=True):
 	back_populates="check_session")
 
 ```
-
+ Backpopulates serve ad esplicitare la foreign key non solo al db ma anche a sql model. Funziona lo stesso anche senza.
 ## Examples (from ABB Backend)
 - Dentro api/routes/v0 fare una rotta diversa per ogni funzionalità diversa del backend (in abb noi abbiamo /policy_check ma anche /commercial_condition per gettare tutte le policy dal db). Spostare le rotte in base al pattern REST FUL. 
   Se ho bisogno di una risorsa diversa (come le commercial conditions, che prescindono dal policy check) faccio una rotta diversa. 
@@ -534,17 +534,15 @@ def create_check_session(
             return check_session
 ```
 
-⚠️DA SISTEMARE
+Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle.
 ### Models.py VS Db Models
 
 I modelli (models.py) posti all'interno delle rotte sono utilizzati per quelle specifiche rotte per esempio per formattare le risposte dell'utente (difatti nel nome presentano spesso finali come "out" o "response"). Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
-
 ### Middleware
+Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger. Ecco un setup iniziale:
 
-Ogni volta che arriva una richiesta viene intercettata dal middleware, si usano per esempio per i logger
 ```python
 from fastapi.middleware.cors import CORSMiddleware
-
 
 app.add_middleware(
 CORSMiddleware,
@@ -554,10 +552,7 @@ allow_methods=["*"],
 allow_headers=["*"],
 )
 ```
-2. Cosa fa backpopulates? Serve ad esplicitare la foreign key non solo al db ma anche a sql model. Funziona anche senza comunque
-3. Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle. SI, bravissimi
 
-⚠️FINE PARTE DA SISTEMARE 
 ### Alembic per le Migration
 
 Una migration è una modifica dello schema del database senza dover riscrivere da zero. Alembic è un framework per questo:
@@ -629,17 +624,155 @@ from fastapi import Depends, BackgroundTasks
         # Immediate response to the client including report id
         return {"message": "Analysis started!", "report_id": report_id}
 ```
-SISTEMARE QUESTA PARTE⚠️
-Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio BackgroundTasks) che però da swagger (o in generale nell'utilizzo reale) non dobbiamo passare. Poi dentro la rotta si passa il "metodo" (in questo caso policy_checking_pipeline_manager.run_policy_check) che esegue quella rotta all'interno di background_tasks.add_task come parametro e i parametri del metodo a sua volta come parametri di add_task messi posizionalmente DOPO di lui.
+Nota come si vada a passare un parametro fittizio alla rotta (ossia proprio BackgroundTasks) che però da swagger (o in generale nell'utilizzo reale) non dobbiamo passare. Poi dentro la rotta si passa il "metodo" con depends (in questo caso policy_checking_pipeline_manager.run_policy_check) che quella rotta deve eseguire all'interno di background_tasks.add_task come parametro e i parametri del metodo a sua volta come parametri di add_task messi posizionalmente DOPO il metodo stesso.
 
-Questo codice ci permette di lanciare il task in background, ma quando il task finisce non andrà in automatico a "sovrascrivere" la risposta analysis started, permette solo di "liberare" l'esecuzione perché è come se lanciassimo una funzione async facendo await. Siamo noi poi a dover prevedere che il codice della dipendenza usata ossia (policy_checking_pipeline_manager.run_policy_check ) infine ci reindirizzi sul risultato dell'analisi
-
-SISTEMARE E AGGIUNGI CHE ci facciamo tornare assieme ad analysis started anche l'id del report che sta per essere generato così da poterlo usare per richiedere esattamente quel report lì
-
-AGGIUNGI PURE CHE polling al db aspettando risultato e quando trovi results=done visualizzi pacchetto a frontend
+Questo codice ci permette di lanciare il task in background ritornando a frontend il messaggio analysis started e l'id del report che andremo a generare, ma quando il task finisce non andrà in automatico a "sovrascrivere" la risposta analysis started, permette solo di "liberare" l'esecuzione perché è come se lanciassimo una funzione async facendo await. 
+Siamo noi poi a dover prevedere che il codice della dipendenza usata ossia (policy_checking_pipeline_manager.run_policy_check ) infine ci reindirizzi sul risultato dell'analisi. Questo lo facciamo creando una rotta che vada in polling sul db, cosicché appena quella run di policy checker (identificata dal report_id) sarà completata, il front end potrà mostrarla all'utente
 
 ## File handling through file system:
-https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/8e5f553ee1f7f9ab144d0902f57ed44a0a77fd8f
+
+Per semplicità e per evitare di adoperare bucket o S3 vari, nel progetto ABB si è scelto di salvare i file che vengono immessi dall'utente nel file system della macchina che hosterà l'applicativo. Ciò viene impostato a partire dall'init dell'applicativo che andrà a creare, se non esiste già, una cartella che fungerà da root per il nostro file system e ogni file caricato verrà salvato in una sottocartella relativa a quella determinata sessione di utilizzo del programma.
+
+Vediamo come introdurre questa cosa nella route policy_check, in particolare nel file api.py
+```python
+from fastapi import Depends
+from fastapi.routing import APIRouter
+from api.dependencies import APIDependencies
+from api.routes.v0.constants import V0_PREFIX
+from api.routes.v0.policy_check.models import (
+    PolicyCheckingPipelineRequest,
+    PolicyCheckingPipelineResponse,
+)
+from fastapi import Depends, BackgroundTasks
+from typing import Dict
+from file_handler.file_handler import FileHandler  <- fondamentale
+from api.settings import APISettings               <- per caricare model.py
+settings = APISettings()                           <- effettivo model.py
+
+def create_policy_check_v0_router(dependencies: APIDependencies) -> APIRouter:
+    router = APIRouter(prefix=f"{V0_PREFIX}/policy-check")
+    @router.post("/policy-checking-pipeline")
+    def post_policy_checking_pipeline(
+        body: PolicyCheckingPipelineRequest,
+        background_tasks: BackgroundTasks,
+        policy_checking_pipeline_manager=Depends(
+            lambda: dependencies.policy_checking_pipeline_manager
+        ),
+    ) -> Dict[str, str]:
+        """Start the policy checking pipeline in background and return immediately."""
+        
+        commercial_conditions_ids = body.commercial_conditions_ids
+        analysis_mode = body.analysis_mode
+        document_ids = [100, 101, 102]
+        
+        # files = body.files
+        files = ["/Users/benedettomanasseri/Desktop/Progetti Consulting/tc-ai/customer_docs/harvest/4346-Harvest_SPC MOD-PRG501-04_2023.02.08 Rev. 02. C.4 - B9.pdf"]            <- FILE FITTIZIO COL QUALE PROVIAMO IL TUTTO
+        
+        # Persist a pending Report and retrieve its id
+        check_session = dependencies.crud.create_check_session(
+            user_id=1,  # TODO: replace user_id placeholder with user info from authentication when available
+            commercial_conditions_ids=commercial_conditions_ids,
+            document_ids=document_ids,
+        )
+
+		👇🏻PARTE DOVE CREIAMO IL FILE "FAKE" NEL FILE SYSTEM👇🏻
+        file_handler = FileHandler(check_session.id)   <- Passiamo session_id
+        for file in files:
+            with open(file, "rb") as f: 
+                file_handler.fake_upload_file(f)
+
+
+        # Start the policy checking pipeline in background
+        background_tasks.add_task(
+            policy_checking_pipeline_manager.run_policy_check,
+            commercial_conditions_ids,
+            analysis_mode,
+            check_session.id,
+            dependencies.crud,
+        )
+        # Immediate response to the client including report id
+        return {"message": "Analysis started!", "check_session_id": str(check_session.id)}
+    return router
+```
+
+File models.py dove sta la struttura PolicyCheckingPipelineRequest che contiene tutti i parametri che passiamo dal body. La lista di file è commentata perché per provarlo senza frontend abbiamo ovviato a ciò con un file fake preso da un percorso specifico dal pc di Benedetto.
+
+```python
+from pydantic import BaseModel
+from typing import Dict, Literal
+from fastapi import UploadFile           <- uno dei tipi predefiniti di FastAPI
+class PolicyCheckingPipelineRequest(BaseModel):
+    commercial_conditions_ids: list[int]
+    analysis_mode: Literal["baseline", "router"] = "baseline"
+    #files: list[UploadFile]
+class PolicyCheckingPipelineResponse(BaseModel):
+    overview: str
+    commercial_conditions_details: Dict
+class CommercialConditionDetails(BaseModel):
+    commercial_condition_name: str
+    commercial_condition_description: str
+    commercial_condition_priority: str
+    commercial_condition_further_requests: str
+```
+
+IMPORTANTE aggiungere il path del file system nell'env (e quindi anche in settings.py) così che venga regolato da lì in fase di deploy
+```python
+from pydantic_settings import BaseSettings
+from pydantic import Field
+import os
+class APISettings(BaseSettings):
+    host: str
+    port: int
+    debug: bool
+    database_url: str
+    file_system_path: str                 <-FONDAMENTALE AGGIUNGERLO
+    
+class AzureSettings(BaseSettings):
+    """Azure OpenAI specific settings"""
+    azure_openai_api_key: str
+    azure_openai_endpoint: str
+    azure_openai_api_version: str
+    model_name: str = "gpt-4.1"
+    temperature: float = 0.0
+    
+class ParserSettings(BaseSettings):
+    """Azure Parser specific settings"""
+    azure_parser_api_key: str
+    azure_parser_endpoint: str
+    result_type: str = "markdown"
+    
+class AIAppSettings(BaseSettings):
+    """Main application settings"""
+    azure_openai: AzureSettings = AzureSettings()
+```
+
+Per finire ecco il file della classe "file_handler" passatoci da Fra (che lo aveva già implementato nel progetto Bandit) che abbiamo poi modificato implementando i metodi
+```python
+import os
+from api.settings import APISettings
+from fastapi import UploadFile
+from io import BufferedReader
+settings = APISettings()
+class FileHandler:
+    def __init__(self, session_id: str):
+        self.final_path = os.path.join(settings.file_system_path, str(session_id))
+        # creare la cartella input_documents se non esiste
+        if not os.path.exists(self.final_path):
+            os.makedirs(self.final_path)
+            
+    def upload_file(self, file: UploadFile):          <- very easy
+        file_path = os.path.join(self.final_path, file.filename)
+        pass
+        
+    def fake_upload_file(self, file: BufferedReader): <- per test senza front end
+        file_path = os.path.join(self.final_path, "fake_file.pdf")
+        with open(file_path, "wb") as f:
+            f.write(file.read())
+            
+    def download_file(self, file_path: str):
+        pass
+```
+
 
 ## Concorrenza in Python: Thread vs. Asyncio
 
