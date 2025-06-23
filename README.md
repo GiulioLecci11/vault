@@ -1,1 +1,1 @@
-# My Second 🧠
+# My Second Brain 🧠
