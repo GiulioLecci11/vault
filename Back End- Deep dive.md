@@ -689,8 +689,150 @@ allow_headers=["*"],
 )
 ```
 
-### Alembic per le Migration
+### Script per droppare e ripopolare DB
 
+recreate_db.sh (eseguire lui)
+```bash
+rm test.db
+rm -rf src/alembic/versions/*
+rm -rf input_documents/*
+alembic revision --autogenerate -m "Initial revision"
+ruff format src
+alembic upgrade head
+# Populate database with sample data
+echo "Populating database with sample data..."
+python scripts/populate_sample_data.py
+```
+
+populate_sample_data.py
+```python
+#!/usr/bin/env python3
+"""
+Script to populate the database with sample data.
+"""
+import sys
+from pathlib import Path
+# Add src to path so we can import modules
+sys.path.append(str(Path(__file__).parent.parent / "src"))
+from datetime import datetime, timezone
+from common.dependencies.db.db_manager import DBManager
+from common.dependencies.db.db_models import (
+    User,
+    CheckSession,
+    CommercialConditionCheck,
+    CheckSessionState,
+    CheckOutcome,
+)
+from dotenv import load_dotenv
+import os
+load_dotenv()
+def populate_sample_data() -> None:
+    """Populate the database with sample data."""
+    # Initialize database connection
+    db_manager = DBManager(os.getenv("DATABASE_URL"))
+    
+    PRIMA, COL "FILE DB SQLITE" ERA
+    "db_manager = DBManager("sqlite:///test.db")"
+    
+    with db_manager.get_session(autocommit=True) as session:
+        # 1. Create a user
+        user = User(id="1", email="test.user@example.com", name="Test User")
+        # 2. Create a running check session without checks
+        running_session = CheckSession(
+            user_id=user.id,
+            commercial_conditions_ids=[1, 2, 4],
+            document_ids=["101", "102"],
+            state=CheckSessionState.RUNNING,
+        )
+        session.add(running_session)
+        session.commit()
+        session.refresh(running_session)
+        print(f"Created running check session (ID: {running_session.id})")
+        # 3. Create a completed check session with checks
+        completed_session = CheckSession(
+            user_id=user.id,
+            commercial_conditions_ids=[4, 5],
+            document_ids=["103", "104", "105"],
+            state=CheckSessionState.COMPLETED,
+            completed_at=datetime.now(timezone.utc),
+        )
+        session.add(completed_session)
+        session.commit()
+        session.refresh(completed_session)
+        print(f"Created completed check session (ID: {completed_session.id})")
+        # Add checks to the completed session - one check for each commercial condition x document combination
+        checks = []
+        # Define reasoning templates for different outcomes and commercial conditions
+        reasoning_templates = {
+            4: {  # Payment terms
+                CheckOutcome.COMPLIANT: "Document {doc_id} clearly states payment terms of 30 days NET, which matches the required commercial condition for payment deadlines.",
+                CheckOutcome.NOT_COMPLIANT: "Document {doc_id} specifies payment terms of 60 days, which exceeds the maximum allowed 30-day payment period.",
+                CheckOutcome.NOT_FOUND: "No payment terms or payment deadline information could be found in document {doc_id}.",
+            },
+            5: {  # Delivery terms
+                CheckOutcome.COMPLIANT: "Document {doc_id} explicitly mentions delivery terms as FOB destination with carrier liability, satisfying the shipping requirements.",
+                CheckOutcome.NOT_COMPLIANT: "Document {doc_id} specifies FOB origin terms, which does not meet the required FOB destination delivery condition.",
+                CheckOutcome.NOT_FOUND: "No delivery terms or shipping conditions could be identified in document {doc_id}.",
+            },
+            6: {  # Warranty
+                CheckOutcome.COMPLIANT: "Document {doc_id} provides a 24-month comprehensive warranty, meeting the minimum warranty requirement.",
+                CheckOutcome.NOT_COMPLIANT: "Document {doc_id} offers only a 12-month warranty, falling short of the required 24-month warranty period.",
+                CheckOutcome.NOT_FOUND: "No warranty information or coverage details could be located in document {doc_id}.",
+            },
+            7: {  # Force majeure
+                CheckOutcome.COMPLIANT: "Document {doc_id} contains comprehensive force majeure clauses covering natural disasters and exceptional circumstances.",
+                CheckOutcome.NOT_COMPLIANT: "Document {doc_id} has limited force majeure provisions that do not adequately cover all required exceptional circumstances.",
+                CheckOutcome.NOT_FOUND: "No force majeure clauses or exceptional circumstances provisions could be found in document {doc_id}.",
+            },
+        }
+        # Create a check for each commercial condition and document combination
+        for cc_id in completed_session.commercial_conditions_ids:
+            for doc_id in completed_session.document_ids:
+                # Vary outcomes to create realistic test data
+                if cc_id == 4:  # Payment terms
+                    outcome = (
+                        CheckOutcome.COMPLIANT
+                        if doc_id in [103, 104]
+                        else CheckOutcome.NOT_COMPLIANT
+                    )
+                elif cc_id == 5:  # Delivery terms
+                    outcome = (
+                        CheckOutcome.COMPLIANT
+                        if doc_id in [103, 105]
+                        else CheckOutcome.NOT_FOUND
+                    )
+                elif cc_id == 6:  # Warranty
+                    outcome = (
+                        CheckOutcome.NOT_COMPLIANT
+                        if doc_id == 104
+                        else CheckOutcome.COMPLIANT
+                    )
+                else:  # cc_id == 7, Force majeure
+                    outcome = CheckOutcome.NOT_FOUND
+                reasoning = reasoning_templates[cc_id][outcome].format(doc_id=doc_id)
+                checks.append(
+                    CommercialConditionCheck(
+                        commercial_condition_id=cc_id,
+                        check_session_id=completed_session.id,
+                        document_id=doc_id,
+                        outcome=outcome,
+                        reasoning=reasoning,
+                        pages=[1, 2, 3],
+                        information_content="This commercial condition is about the payment terms of the contract.",
+                    )
+                )
+        for check in checks:
+            session.add(check)
+        session.commit()
+        print(
+            f"Created {len(checks)} commercial condition checks (4 conditions × 3 documents)"
+        )
+    print("Sample data population completed successfully!")
+if __name__ == "__main__":
+    populate_sample_data()
+```
+
+### Alembic per le Migration
 Una migration è una modifica dello schema del database senza dover riscrivere da zero. Alembic è un framework per questo:
 
 **Comandi principali**:
