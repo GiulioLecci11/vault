@@ -603,7 +603,7 @@ from fastapi import Depends, BackgroundTasks
     def post_policy_checking_pipeline(
         body: PolicyCheckingPipelineRequest,
         background_tasks: BackgroundTasks,
-        policy_checking_pipeline_manager=Depends(
+        policy_checking_pipeline_manager=Depends(   <-QUESTO POI CAMBIATO
             lambda: dependencies.policy_checking_pipeline_manager
         ),
     ) -> Dict[str, str]:
@@ -783,6 +783,23 @@ Finora abbiamo visto la procedura per passare un fake file, dal file system del 
 In particolare va notato che NON SI PUO' più usare un singolo parametro (definito nei models della rotta) per tutti i parametri del body. In quanto alcuni di questi sono del tipo Form e altri del tipo File e i due non funzionano se messi insieme. Vediamo il file **api.py** della rotta policy_check (rotta post dove facciamo caricamento dei file e lanciamo policy_check)
 
 ```python
+
+from fastapi import Depends, BackgroundTasks, Form, File, UploadFile
+from fastapi.routing import APIRouter
+from typing import Dict, List
+from api.dependencies import APIDependencies
+from api.routes.v0.constants import V0_PREFIX
+from api.routes.v0.policy_check.models import (
+    PolicyCheckingPipelineResponse,
+)
+from file_handler.file_handler import FileHandler
+from api.settings import APISettings
+from fastapi import HTTPException
+from common.dependencies.db.db_models import User
+
+settings = APISettings()
+
+
 def create_policy_check_v0_router(dependencies: APIDependencies) -> APIRouter:
     router = APIRouter(prefix=f"{V0_PREFIX}/policy-check")
     @router.post("/policy-checking-pipeline")
@@ -798,10 +815,9 @@ def create_policy_check_v0_router(dependencies: APIDependencies) -> APIRouter:
         ),
         
         files: List[UploadFile] = File(..., description="Upload multiple files"),
+	    
+		    current_user: User = Depends(dependencies.authentication_manager.get_current_user), <- "Depends" esegue una funzione e mette il risultato nella roba che invoca depends
         
-        policy_checking_pipeline_manager=Depends(     SISTEMARE QUESTA PARTE⚠️ ( https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/7c5b23ec94c0bdbb1353d79b2e873bc88fbf404d ) 
-            lambda: dependencies.policy_checking_pipeline_manager
-        ),
     ) -> Dict[str, str]: <- questo cambiato perché se torno oggetto significa che è andato tutto bene⚠️
         """Start the policy checking pipeline in background and return immediately."""
         
@@ -823,7 +839,8 @@ def create_policy_check_v0_router(dependencies: APIDependencies) -> APIRouter:
             file_handler.upload_file(file)    <- NON PIU' FAKE
         
         background_tasks.add_task(
-            policy_checking_pipeline_manager.run_policy_checking_pipeline,
+	(IMPORTATO DA DEPENDENCIES INVECE CHE USARE DEPENDS COME PRIMA)
+	dependencies.policy_checking_pipeline_manager.run_policy_checking_pipeline,
             commercial_conditions_ids_list,
             analysis_mode,
             check_session.id,
@@ -837,9 +854,20 @@ def create_policy_check_v0_router(dependencies: APIDependencies) -> APIRouter:
     return router
 ```
 
+## Come testare frontend e backend ASSIEME
 
-VEDI QUESTO COMMIT https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/2b42a7bcb40b5ce2097904c50a218657807010a6 e poi ultimo https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/881987e2ec111ce037b2f4455d44aa6655137872 e probabilmente inutile https://git.datapizza.tech/lab-ai/customers/abb/policy-checker/tc-ai/-/commit/b1e391a85d92f46ae504414b5c0f954fdb58e620
+Lanciare 
+```bash
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash 
 
+nvm install v22.16.0
+```
+Clonare poi la cartella gitlab contenente il progetto frontend, come al solito. Poi, dentro la cartella aprire il terminale e lanciare
+```bash
+npm install
+
+npm run dev <- DOPO aver lanciato il backend da un altro terminale
+```
 ## Concorrenza in Python: Thread vs. Asyncio
 
 ### Cos'è il GIL?
