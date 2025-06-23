@@ -534,7 +534,143 @@ def create_check_session(
             return check_session
 ```
 
-Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle.
+### Question: Dove vanno messe le operazioni che sfruttano dependencies.crud e quindi che interagiscono col db? 
+Noi le abbiamo messe dentro la parte di common/dependencies/ai  facendo attenzione a if crud (in and con altra roba) prima di usarle.
+
+Vediamo infine un esempio di scrittura di una tabella ciclando su quello che è il json che ci viene fornito alla fine della run del policy_checker
+
+```python
+   def save_commercial_condition_check(
+        self,
+        user_id: str,
+        check_session_id: int,
+        commercial_condition_id: int,
+        document_id: str,
+        outcome: CheckOutcome,
+        reasoning: str,
+        pages: list[int],
+        information_content: str,
+    ) -> CommercialConditionCheck:
+        with self.db_manager.get_session() as db_session:
+            commercial_condition_check = CommercialConditionCheck(
+                commercial_condition_id=commercial_condition_id,
+                check_session_id=check_session_id,
+                document_id=document_id,
+                outcome=outcome,
+                reasoning=reasoning,
+                pages=pages,
+                information_content=information_content,
+            )
+            db_session.add(commercial_condition_check)
+            db_session.commit()
+            db_session.refresh(commercial_condition_check)
+            return commercial_condition_check
+
+
+
+    def save_analysis_results(
+        self,
+        user_id: str,
+        check_session_id: int,
+        analysis_results: dict,       <- il JSON del cristo
+    ) -> list[CommercialConditionCheck]:
+        """
+        Parse and save the analysis results from the JSON format.
+        Args:
+            user_id: The user ID
+            check_session_id: The check session ID
+            analysis_results: The JSON analysis results
+        Returns:
+            List of saved CommercialConditionCheck objects
+        """
+        saved_checks = []
+        if "commercial_conditions_details" not in analysis_results:
+            raise ValueError(
+                "Missing 'commercial_conditions_details' in analysis results"
+            )
+        commercial_conditions_details = analysis_results[
+            "commercial_conditions_details"
+        ]
+        for (
+            commercial_condition_id_str,
+            documents_data,
+        ) in commercial_conditions_details.items():
+            commercial_condition_id = int(commercial_condition_id_str)
+            for document_id, document_data in documents_data.items():
+                # Map checking_result to CheckOutcome enum
+                checking_result = document_data.get("checking_result", "").upper()
+                outcome_mapping = {     <--Mapping con enumerativo
+                    "COMPLIANT": CheckOutcome.COMPLIANT,
+                    "NOT COMPLIANT": CheckOutcome.NOT_COMPLIANT,
+                    "NOT_COMPLIANT": CheckOutcome.NOT_COMPLIANT,
+                    "NOT FOUND": CheckOutcome.NOT_FOUND,
+                    "NOT_FOUND": CheckOutcome.NOT_FOUND,
+                }
+                if checking_result not in outcome_mapping:
+                    print(
+                        f"Warning: Unknown checking_result '{checking_result}' for document {document_id}"
+                    )
+                    continue
+                outcome = outcome_mapping[checking_result]
+                reasoning = document_data.get("comment", "")
+                # Extract pages from information_page, handling null values
+                extracted_info = document_data.get("extracted_information", {})
+                information_pages = extracted_info.get("information_page", [])
+                information_content = (
+                    extracted_info.get("information_content", "")
+                    if extracted_info.get("information_content") is not None
+                    else ""
+                )
+                # Filter out null values and convert to integers
+                pages = []
+                if information_pages:
+                    for page in information_pages:
+                        if page is not None:
+                            try:
+                                pages.append(int(page))
+                            except (ValueError, TypeError):
+                                continue
+                # Save the check
+                saved_check = self.save_commercial_condition_check(
+                    user_id=user_id,
+                    check_session_id=check_session_id,
+                    commercial_condition_id=commercial_condition_id,
+                    document_id=document_id,
+                    outcome=outcome,
+                    reasoning=reasoning,
+                    pages=pages,
+                    information_content=information_content,
+                )
+                saved_checks.append(saved_check)
+        return saved_checks
+```
+
+Queste funzioni vengono richiamate nel file ai_baseline_manager.py, all'interno della parte ai, DOPO che la run del policy_checker ha finito di lavorare. Questo avviene in una determinata sessione dopo che un utente singolo ha caricato i documenti e fatto partire l'analisi
+
+```python
+	[..] <- Altro codice della classe `PolicyCheckingPipelineManager`
+			# Save the result in the database and update status to COMPLETED
+            if check_session_id and crud and json_result and user:
+                try:
+                    # Parse and save individual commercial condition checks
+                    saved_checks = crud.save_analysis_results(
+                        user_id=user.id,
+                        check_session_id=check_session_id,
+                        analysis_results=json_result,
+                    )
+                    print(f"Saved {len(saved_checks)} commercial condition checks")
+                    # Update session status to COMPLETED
+                    crud.complete_check_session(user.id, check_session_id, json_result)
+                except Exception as save_error:
+                    print(f"Error saving analysis results: {save_error}")
+                    crud.update_check_session_status(
+                        user.id, check_session_id, CheckSessionState.FAILED
+                    )
+                    return None
+        except Exception as e:
+            print(f"Error: {e}")
+```
+
 ### Models.py VS Db Models
 
 I modelli (models.py) posti all'interno delle rotte sono utilizzati per quelle specifiche rotte per esempio per formattare le risposte dell'utente (difatti nel nome presentano spesso finali come "out" o "response"). Questo perché magari nei db_models ho un sacco di dati che non voglio esporre all'utente, i modelli nelle singole rotte potrebbero essere sottoinsiemi o unioni di db_models vari.
@@ -563,7 +699,7 @@ Una migration è una modifica dello schema del database senza dover riscrivere d
 # Creare una revisione manuale
 alembic revision -m "add info to user"
 
-# Creare una revisione automatica (consigliato)
+# Creare una revisione automatica (consigliato dopo aver modificato db_models)
 alembic revision --autogenerate -m "messaggio"
 
 # Applicare le migration
