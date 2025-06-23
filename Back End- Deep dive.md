@@ -861,8 +861,8 @@ class APISettings(BaseSettings):
     port: int
     debug: bool
     database_url: str
-    file_system_path: str                 <-FONDAMENTALE AGGIUNGERLO
-    
+    file_system_path: str           <-FONDAMENTALE AGGIUNGERLO (in env abbiamo                                         FILE_SYSTEM_PATH=./input_documents)
+     
 class AzureSettings(BaseSettings):
     """Azure OpenAI specific settings"""
     azure_openai_api_key: str
@@ -1004,6 +1004,36 @@ npm install
 
 npm run dev <- DOPO aver lanciato il backend da un altro terminale
 ```
+
+## POSTGRES DB
+
+Lanciare su terminale
+```bash
+docker run --name postgres-test \
+  -e POSTGRES_USER=testuser \
+  -e POSTGRES_PASSWORD=testpass \
+  -e POSTGRES_DB=testdb \
+  -p 5432:5432 \
+  -d postgres:17
+```
+Questo tirerà su un postgres e lo infila dentro docker desktop. Funzione in generale
+
+### Specifico per progetto
+
+Nel file .env poi cambiare 
+```bash
+DATABASE_URL = "postgresql+psycopg://testuser:testpass@localhost:5432/testdb" (virgolette comprese)
+```
+
+E lanciare su terminale del backend 
+```bash
+uv add "psycopg[binary]"
+```
+
+Infine lanciando poi lo script che ricrea il db, possiamo vederlo da DBeaver (config in foto)
+![[Pasted image 20250623121205.png]]
+password testpass
+
 ## Concorrenza in Python: Thread vs. Asyncio
 
 ### Cos'è il GIL?
