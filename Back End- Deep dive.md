@@ -689,7 +689,7 @@ allow_headers=["*"],
 )
 ```
 
-### Script per droppare e ripopolare DB
+### Script per droppare e ripopolare DB (Versione 1)
 
 recreate_db.sh (eseguire lui)
 ```bash
@@ -830,6 +830,79 @@ def populate_sample_data() -> None:
     print("Sample data population completed successfully!")
 if __name__ == "__main__":
     populate_sample_data()
+```
+
+### Versione 2 (non l'ho letta per bene)
+recreate_db.sh
+```bash
+#!/bin/bash
+# Drop and recreate the database (works with any database)
+echo "Dropping and recreating database..."
+python scripts/drop_recreate_db.py
+# Remove existing alembic migration versions
+echo "Removing existing alembic versions..."
+rm -rf src/alembic/versions/*
+# Remove input documents
+echo "Removing input documents..."
+rm -rf input_documents/*
+# Generate new initial migration
+echo "Generating new alembic migration..."
+alembic revision --autogenerate -m "Initial revision"
+# Format the generated code
+echo "Formatting code..."
+ruff format src
+# Apply the migration
+echo "Applying migration..."
+alembic upgrade head
+# Populate database with sample data
+echo "Populating database with sample data..."
+python scripts/populate_sample_data.py
+echo "Database recreation completed successfully!"
+```
+
+drop_recreate_db.py
+```python
+#!/usr/bin/env python3
+"""
+Script to drop and recreate the database.
+Works with any database supported by SQLAlchemy.
+"""
+import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+from sqlalchemy_utils import database_exists, drop_database, create_database
+# Load environment variables
+load_dotenv()
+def drop_and_recreate_database() -> None:
+    """Drop and recreate the database using the DATABASE_URL from environment."""
+    
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        print("Error: DATABASE_URL environment variable is not set!")
+        sys.exit(1)
+    
+    print(f"Using database URL: {database_url}")
+    
+    try:
+        # Check if database exists and drop it
+        if database_exists(database_url):
+            print("Database exists. Dropping...")
+            drop_database(database_url)
+            print("Database dropped successfully!")
+        else:
+            print("Database does not exist. Nothing to drop.")
+        
+        # Create the database
+        print("Creating database...")
+        create_database(database_url)
+        print("Database created successfully!")
+        
+    except Exception as e:
+        print(f"Error managing database: {e}")
+        sys.exit(1)
+if __name__ == "__main__":
+    drop_and_recreate_database()
 ```
 
 ### Alembic per le Migration
