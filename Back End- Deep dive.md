@@ -360,6 +360,171 @@ Usare SQLModel (dello stesso sviluppatore di FastAPI) o SQLAlchemy. L'idea è de
 class User(DBBaseModel, table=True):
     id: int = Field(default=None, primary_key=True)
 ```
+Vediamo un esempio di come usare pydantic per validare un output (AnalysisOutputSchema è una classe definita come segue)
+
+```python
+from pydantic import BaseModel, Field
+from typing import Dict, Optional, List
+
+class ExtractedInformation(BaseModel):
+    """Contiene l'informazione estratta dal documento."""
+    information_content: str = Field(
+        ..., description="Il testo esatto estratto dal documento."
+    )
+    information_page: List[str] = Field(
+        ..., description="La pagina da cui è stato estratto il testo."
+    )
+
+
+class FileAnalysisResult(BaseModel):
+    """Il risultato dell'analisi per un singolo file."""
+    extracted_information: Optional[ExtractedInformation] = Field(
+        None, description="L'informazione estratta dal documento."
+    )
+    checking_result: str = Field(
+        ..., description="L'esito del controllo (es. 'Compliant', 'Not Compliant')."
+    )
+    comment: str = Field(
+        ..., description="Un commento dell'AI che motiva il risultato."
+    )
+
+
+class CommercialConditionResult(BaseModel):
+    """Il risultato dell'analisi per una singola condizione commerciale."""
+    filename: FileAnalysisResult
+
+
+# Questo è il modello principale che ci aspettiamo dall'output di un agente
+class AnalysisOutputSchema(BaseModel):
+    """
+    Rappresenta l'output JSON completo di un agente,
+    contenente i dettagli per ogni condizione commerciale analizzata.
+    """
+    commercial_conditions_details: Dict[str, CommercialConditionResult] = Field(
+        ...,
+        description="Un dizionario dove la chiave è l'ID della condizione e il valore è un altro dizionario con chiave il nome del file.",
+    )
+```
+
+```python
+async def call_cluster_agent(self) -> str:
+        """
+        Function to call the cluster agent.
+        Returns:
+            result: string containing the result of the cluster agent with the following structure:
+            {
+                'commercial_conditions_details': {
+                        commercial_condition_id: {
+                                    filename: {
+                                                    'extracted_information': {
+                                                                            'information_content':
+                                                                            'information_page':
+                                                                            },
+                                                    'checking_result':
+                                                    'comment':
+                                                }
+                                    }
+                            }
+            }
+        """
+        document_content = self._create_content(self.doc)
+        doc_name = self.doc["document_name"]
+        # Inizializza la struttura del dizionario di output finale
+        output_dict = {"commercial_conditions_details": {}}
+        # Dizionario temporaneo per contenere i dati parsati dal risultato dell'agente
+        old_dict = {}
+        # Retry mechanism for JSON parsing
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                result = await self.a_invoke(document_content)
+                # Parse JSON
+                parsed_json = json.loads(result)
+                # Validate with pydantic
+                try:
+                    validated_response = AnalysisOutputSchema(**parsed_json)
+                    old_dict["commercial_conditions_details"] = (
+                        validated_response.commercial_conditions_details
+                    )
+                    logger.info(
+                        f"Successfully validated agent response on attempt {attempt + 1}"
+                    )
+                    break
+                except ValidationError as validation_error:
+                    logger.error(
+                        f"Pydantic validation failed on attempt {attempt + 1}/{max_retries}: {validation_error}"
+                    )
+                    logger.error(f"Raw result text: {result[:200]}...")
+                    if attempt == max_retries - 1:
+                        logger.error(
+                            "All retry attempts failed due to validation errors. Returning empty result."
+                        )
+                        return json.dumps(
+                            {
+                                "commercial_conditions_details": {},
+                                "error": f"Validation error after {max_retries} attempts: {str(validation_error)}",
+                            }
+                        )
+                    continue
+            except json.JSONDecodeError as e:
+                logger.error(
+                    f"JSON parsing failed on attempt {attempt + 1}/{max_retries}: {e}"
+                )
+                logger.error(
+                    f"Raw result text: {result.text[:200]}..."
+                    if hasattr(result, "text")
+                    else "No result text available"
+                )
+                if attempt == max_retries - 1:
+                    # Last attempt failed, return error result
+                    logger.error("All retry attempts failed. Returning empty result.")
+                    return json.dumps(
+                        {
+                            "commercial_conditions_details": {},
+                            "error": "Failed to parse agent response after 5 attempts",
+                        }
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Unexpected error on attempt {attempt + 1}/{max_retries}: {e}"
+                )
+                if attempt == max_retries - 1:
+                    # Last attempt failed, return error result
+                    logger.error(
+                        "All retry attempts failed due to unexpected error. Returning empty result."
+                    )
+                    return json.dumps(
+                        {
+                            "commercial_conditions_details": {},
+                            "error": f"Unexpected error after 5 attempts: {str(e)}",
+                        }
+                    )
+        # Riorganizza la struttura dati: da policy->info a policy->documento->info
+        for commercial_condition_id, commercial_condition_result in old_dict[
+            "commercial_conditions_details"
+        ].items():
+            # Se la policy non esiste ancora nel dizionario di output, la crea
+            if (
+                commercial_condition_id
+                not in output_dict["commercial_conditions_details"]
+            ):
+                output_dict["commercial_conditions_details"][
+                    commercial_condition_id
+                ] = {}
+            # Assegna le informazioni della policy per questo specifico documento
+            # Prende il valore "filename" dalla struttura originale
+            file_analysis_result = commercial_condition_result.filename
+            # Se il campo checking_result è not found, allora assicurati che il campo extracted_information sia null
+            if file_analysis_result.checking_result.lower() == "not found":
+                file_analysis_result.extracted_information = None
+            output_dict["commercial_conditions_details"][commercial_condition_id][
+                doc_name
+            ] = file_analysis_result.model_dump()
+        # Converte il dizionario finale in formato JSON e lo assegna al risultato
+        result = json.dumps(output_dict)
+        return result
+```
+
 
 Esempio di due tabelle complesse e correlate tra loro da una relazione
   
@@ -942,10 +1107,10 @@ def welcome_message() -> str:
 - `expire=20`: cache eliminata ogni 20 secondi
 
 ## Celery:
-Framework utile per gestire il sincronismo in maniera molto automatizzata. **UTILE QUANDO SI HANNO OPERAZIONI MOLTO RESOURCE DEMANDING** (come train di modelli)
+Framework utile per gestire il sincronismo in maniera molto automatizzata. **UTILE QUANDO SI HANNO OPERAZIONI MOLTO RESOURCE DEMANDING** (come train di modelli). Crea un processo nuovo a livello di macchina
 
 ## FastAPI background tasks:
-Come Celery, ma utile per operazioni più leggere (https://fastapi.tiangolo.com/tutorial/background-tasks/) 
+Come Celery (anche se questo usa i thread), ma utile per operazioni più leggere (docs: https://fastapi.tiangolo.com/tutorial/background-tasks/) 
 
 ```python
 from fastapi import Depends, BackgroundTasks
