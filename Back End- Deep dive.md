@@ -662,7 +662,7 @@ def get_check_session(self, user_id: int, session_id: int, current_session = Non
 ```
   Abbiamo pure cambiato il nome della session del db in -> db_session. Mentre check_session si riferisce alla run del policy checker
   
-Considerazione su CRUD.py:tutti nomi molto simili per le operazioni del db. Voluto e sono leggermente diverse in quello che fanno, però si riferiscono tutte e 3 alla CheckSession (run del policyChecker) ma al loro interno chiamano pure get_session() che si riferisce alla session del db.
+Considerazione su CRUD.py:tutti nomi molto simili per le operazioni del db. Questo è voluto e sono leggermente diverse in quello che fanno, però si riferiscono tutte e 3 alla CheckSession (run del policyChecker) ma al loro interno chiamano pure get_session() che si riferisce alla session del db.
 
 Ecco un esempio di operazioni di scrittura (creazione e update) di una tabella nel db, queste operazioni stanno dentro crud.py. 
 Nota che PURTROPPO abbiamo avuto la brillante idea di chiamare una run di policy checker come CheckSession quindi la nomenclatura è un po' infelice.
