@@ -71,5 +71,9 @@ Ecco una breve spiegazione di alcuni termini e concetti menzionati nell'articolo
 *   **Ontology (Ontologia, nel contesto di Palantir):** In filosofia, l'ontologia è lo studio dell'essere. In informatica e in Palantir, il termine si riferisce alla creazione di un modello di dati che rappresenta il mondo reale in modo strutturato. Invece di avere solo tabelle di dati grezzi, si definiscono "oggetti" (es. "Persona", "Azienda", "Volo"), le loro proprietà (es. una Persona ha un "nome") e le relazioni tra di loro (es. una Persona "lavora per" un'Azienda). Questo modello semantico permette di integrare e analizzare dati provenienti da fonti diversissime in modo coerente.
 *   **YC batch (Y Combinator):** Y Combinator è uno dei più famosi e prestigiosi acceleratori di startup al mondo. Un "batch" è un gruppo di startup che partecipano al suo programma trimestrale. Essere accettati in un "YC batch" è un importante segno di riconoscimento per una giovane azienda.
 
+<<<<<<< HEAD
 [[Reflections on OpenAI]]
+=======
+[[Reflections on OpenAI]]
+>>>>>>> origin/main
 #miscellaneous 
