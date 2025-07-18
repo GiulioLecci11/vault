@@ -62,6 +62,18 @@ uvicorn main:app --workers 4
 ```
 Ogni worker è un processo Python indipendente, con il proprio event loop e il proprio GIL. Questo permette al server di gestire più richieste simultaneamente. Lo svantaggio è che la memoria (es. variabili globali) non è condivisa tra i worker.
 
+
+#### 6. Come passare da sync (default) ad async
+```python
+# SE la funzione è bloccante
+shutil.copy2(file_path, temp_file_path) -> await asyncio.to_thread(shutil.copy2, file_path, temp_file_path)
+
+# SE la funzione è una funzione normale
+converted_filename = self._convert_doc_to_pdf(file_path, filename) -> converted_filename = await self._convert_doc_to_pdf(file_path, filename)
+
+A PATTO CHE dentro la funzione sia tutto asincrono (e awaited) 
+def _convert_doc_to_pdf -> async def _convert_doc_to_pdf
+```
 ---
 
 ### Spiegazione dei Concetti Chiave
@@ -84,3 +96,5 @@ Ecco una breve spiegazione dei termini tecnici menzionati:
 [[Back End- Deep dive]]
 [[New Agents, Tracing and Asyncio (gather) Parallelism (ABB)]]
 [[Fast & Rest API + Snowflake]]
+
+#miscellaneous 
