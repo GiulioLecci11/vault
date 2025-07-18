@@ -1,3 +1,4 @@
+[[Reflections on OpenAI]]
 ### **Sintesi e Traduzione Ragionata di "Riflessioni su Palantir"**
 
 L'autore, Nabeel Qureshi, che ha lavorato in Palantir per otto anni, scrive queste riflessioni per spiegare dall'interno un'azienda spesso fraintesa. Oggi Palantir è un'azienda di grande successo, parte dell'S&P 500 e con una capitalizzazione di mercato che si avvicina ai 100 miliardi di dollari. Questo scenario è quasi surreale per chi, come l'autore, ricorda il periodo 2016-2020, quando lavorare per Palantir era impopolare. L'azienda era vista come una creatrice di "tecnologia spia" per la NSA, subiva proteste regolari e, nel migliore dei casi, veniva liquidata come una società di consulenza mascherata da azienda di software.
@@ -70,10 +71,3 @@ Ecco una breve spiegazione di alcuni termini e concetti menzionati nell'articolo
 *   **The Tyranny of Structurelessness (La Tirannia dell'Assenza di Struttura):** È il titolo di un famoso saggio femminista degli anni '70. Sostiene che i gruppi che rifiutano gerarchie formali non eliminano il potere, ma lo rendono informale, non dichiarato e non responsabile. In queste "strutture invisibili", il potere viene esercitato da cricche e individui carismatici senza alcun controllo, il che può essere peggio di una gerarchia esplicita.
 *   **Ontology (Ontologia, nel contesto di Palantir):** In filosofia, l'ontologia è lo studio dell'essere. In informatica e in Palantir, il termine si riferisce alla creazione di un modello di dati che rappresenta il mondo reale in modo strutturato. Invece di avere solo tabelle di dati grezzi, si definiscono "oggetti" (es. "Persona", "Azienda", "Volo"), le loro proprietà (es. una Persona ha un "nome") e le relazioni tra di loro (es. una Persona "lavora per" un'Azienda). Questo modello semantico permette di integrare e analizzare dati provenienti da fonti diversissime in modo coerente.
 *   **YC batch (Y Combinator):** Y Combinator è uno dei più famosi e prestigiosi acceleratori di startup al mondo. Un "batch" è un gruppo di startup che partecipano al suo programma trimestrale. Essere accettati in un "YC batch" è un importante segno di riconoscimento per una giovane azienda.
-
-<<<<<<< HEAD
-[[Reflections on OpenAI]]
-=======
-[[Reflections on OpenAI]]
->>>>>>> origin/main
-#miscellaneous 
