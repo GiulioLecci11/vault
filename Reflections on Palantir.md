@@ -1,4 +1,5 @@
 [[Reflections on OpenAI]]
+#miscellaneous 
 ### **Sintesi e Traduzione Ragionata di "Riflessioni su Palantir"**
 
 L'autore, Nabeel Qureshi, che ha lavorato in Palantir per otto anni, scrive queste riflessioni per spiegare dall'interno un'azienda spesso fraintesa. Oggi Palantir è un'azienda di grande successo, parte dell'S&P 500 e con una capitalizzazione di mercato che si avvicina ai 100 miliardi di dollari. Questo scenario è quasi surreale per chi, come l'autore, ricorda il periodo 2016-2020, quando lavorare per Palantir era impopolare. L'azienda era vista come una creatrice di "tecnologia spia" per la NSA, subiva proteste regolari e, nel migliore dei casi, veniva liquidata come una società di consulenza mascherata da azienda di software.
