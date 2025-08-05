@@ -5,7 +5,9 @@ Prima di tuffarci in `pytest`, è utile capire *perché* e *come* si testa il so
 Esistono diversi livelli di test:
 
 *   **Unit Test (Test Unitari):** Sono i test più piccoli e specifici. L'obiettivo è testare una singola "unità" di codice in isolamento, come una funzione o un metodo di una classe. Se una funzione `somma(a, b)` deve restituire la somma di due numeri, un unit test verificherà che `somma(2, 3)` restituisca `5`, senza preoccuparsi di come questa funzione viene usata nel resto dell'applicazione.
+
 *   **Integration Test (Test di Integrazione):** Questi test verificano che diverse unità di codice lavorino correttamente insieme. Ad esempio, potresti testare che una funzione che recupera dati dal database (`get_user_data`) e un'altra che formatta questi dati (`format_user_profile`) collaborino senza problemi.
+
 *   **End-to-End Test (E2E):** Questi test simulano il percorso completo di un utente reale attraverso l'applicazione. Ad esempio, un test E2E per un sito di e-commerce potrebbe automatizzare i seguenti passaggi: aprire il sito, cercare un prodotto, aggiungerlo al carrello, procedere al checkout e completare l'acquisto. Sono i test più complessi e lenti, ma danno la massima confidenza sul funzionamento dell'intero sistema.
 
 **Pytest** è un framework potentissimo e molto popolare in Python, particolarmente amato per la sua semplicità e flessibilità, che lo rendono ideale per scrivere test unitari e di integrazione.
@@ -89,6 +91,8 @@ Ci sono due modi principali per fornire un oggetto da una fixture, con una diffe
         db_connection.data.clear()
         db_connection.close()
     ```
+
+
 
 ## Parametrised Settings (Test Parametrizzati)
 
@@ -255,6 +259,63 @@ def test_divide_with_message_check():
     # contenga una stringa specifica.
     with pytest.raises(ValueError, match="Cannot divide by zero"):
         divide(10, 0)
+```
+
+## Marker (tag e filtri avanzati)
+
+I _marker_ sono etichette che puoi applicare ai test per: 
+• raggrupparli ed eseguirne solo un sotto-insieme (`pytest -m slow`) 
+• indicare aspettative particolari (test che fallirà con `xfail`, test da saltare con `skip`, ecc.)
+
+Grazie ai marker puoi organizzare e gestire agilmente suite di test di qualsiasi dimensione.
+
+#### Marker built-in più usati
+
+```
+@pytest.mark.skip(reason="Feature non ancora implementata")
+def test_future_feature():
+    ...
+
+@pytest.mark.xfail(reason="Bug #123 ancora aperto")
+def test_known_bug():
+    assert compute() == 42  # non passerà finché il bug non viene risolto
+
+@pytest.mark.parametrize("n", range(5))
+@pytest.mark.slow  # ipotetico marker custom
+def test_heavy_computation(n):
+    heavy_calc(n)
+```
+
+#### Creare marker personalizzati
+
+Registra i marker nel file `pytest.ini` (o in `pyproject.toml`, sezione `[tool.pytest.ini_options]`) per evitare l’avviso _PytestUnknownMarkWarning_:
+
+```
+# pytest.ini
+[pytest]
+markers =
+    slow: test che richiedono molto tempo
+    integration: test che toccano componenti esterne (DB, API)
+```
+
+#### Filtrare i test con l’opzione `-m`
+
+```
+pytest -m slow                          # esegue solo i test marcati slow
+pytest -m "not slow"                    # esclude i lenti
+pytest -m "integration and not slow"    # combinazioni logiche
+```
+
+#### Marker condizionali
+
+`skipif` e `xfail` permettono di saltare o aspettarsi il fallimento in base a condizioni runtime:
+
+```
+import sys
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="Solo per Unix")
+def test_unix_only():
+    ...
 ```
 
 ## "Tricks": Testare l'output JSON
