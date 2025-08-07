@@ -1392,8 +1392,7 @@ Assolutamente. Questo file di test per `BaseClusterAgent` è molto ricco e intro
 ```python
 # [CASO STUDIO 1: Refactoring dei test con un metodo helper]
 # In questa classe di test, molte funzioni richiedono lo stesso setup di mock di base.
-# Invece di ripetere lo stesso codice di "Arrange" in ogni test, è stato creato un
-# metodo helper privato `_setup_mocks`.
+# Invece di ripetere lo stesso codice di "Arrange" in ogni test, è stato creato un metodo helper privato `_setup_mocks`.
 class TestBaseClusterAgent:
     
     # ... altri test ...
@@ -1402,26 +1401,28 @@ class TestBaseClusterAgent:
         self, mock_settings, mock_azure_client, mock_prompts_service, mock_agent_init
     ):
         """Metodo helper per configurare i mock comuni a più test."""
-        # ... codice per configurare mock_settings, mock_azure_client, ecc. ...
-        
-    # PERCHÉ È IMPORTANTE: Questo approccio segue il principio DRY (Don't Repeat Yourself).
-    # Rende i test più puliti, più facili da leggere e da mantenere. Se la logica di
-    # inizializzazione dei mock dovesse cambiare, basterebbe modificarla in un unico posto
-    # (il metodo helper) invece che in decine di test diversi.
-
+        mock_settings.azure_openai.azure_openai_api_key = "test_api_key"
+        mock_settings.azure_openai.azure_openai_endpoint = "https://test.endpoint.com"
+        mock_settings.azure_openai.azure_openai_api_version = "2023-05-15"
+        mock_settings.azure_openai.model_name = "gpt-4"
+        mock_settings.azure_openai.temperature = 0.7
+        mock_settings.db_manager = Mock()
+        mock_client_instance = Mock()
+        mock_azure_client.return_value = mock_client_instance
+        mock_prompts_service_instance = Mock()
+        mock_prompts_service.return_value = mock_prompts_service_instance
+        mock_agent_init.return_value = None
+    
 # [CASO STUDIO 2: Testare un metodo privato che viene chiamato dal costruttore]
-# La logica per testare `_create_cluster_prompt` è complessa perché questo metodo viene
-# chiamato durante `__init__`. Per testarlo in isolamento, bisogna prima "neutralizzarlo"
-# durante la creazione dell'oggetto e poi chiamarlo esplicitamente.
+# La logica per testare `_create_cluster_prompt` è complessa perché questo metodo viene chiamato durante `__init__`. Per testarlo in isolamento, bisogna prima "neutralizzarlo" durante la creazione dell'oggetto e poi chiamarlo esplicitamente.
+
 class TestBaseClusterAgent:
     # ...
     @patch(...)
     def test_create_cluster_prompt_generates_correct_output_single_policy(self, ...):
         """Testa che _create_cluster_prompt generi l'output corretto."""
         # FASE 1: Creare un'istanza dell'agente NEUTRALIZZANDO la chiamata a _create_cluster_prompt.
-        # Usiamo `patch.object` per sostituire temporaneamente `_create_cluster_prompt`
-        # con un mock che restituisce un valore fittizio. Questo ci permette di creare l'oggetto
-        # `agent` senza eseguire la vera logica di `_create_cluster_prompt` che vogliamo testare.
+        # Usiamo `patch.object` per sostituire temporaneamente `_create_cluster_prompt` con un mock che restituisce un valore fittizio. Questo ci permette di creare l'oggetto `agent` senza eseguire la vera logica di `_create_cluster_prompt` che vogliamo testare.
         with patch.object(BaseClusterAgent, "_create_cluster_prompt", return_value="Mocked"):
             agent = BaseClusterAgent(test_doc, test_cluster)
 
@@ -1438,15 +1439,11 @@ class TestBaseClusterAgent:
         result = agent._create_cluster_prompt()
         assert result == expected_output
 
-        # PERCHÉ È IMPORTANTE: Questo pattern a due fasi (creazione con neutralizzazione,
-        # poi chiamata esplicita) è fondamentale per testare metodi privati che hanno
-        # una logica complessa e che vengono eseguiti all'interno del costruttore.
+        # Questo pattern a due fasi (creazione con neutralizzazione, poi chiamata esplicita) è fondamentale per testare metodi privati che hanno una logica complessa e che vengono eseguiti all'interno del costruttore.
         # Permette un isolamento perfetto dell'unità logica da testare.
 
 # [CASO STUDIO 3: Testare logica di retry con side_effect complesso]
-# La funzione `call_cluster_agent` ha una logica di retry. Per testarla, non basta
-# un `side_effect` semplice. Serve un `side_effect` che cambi comportamento dopo
-# un certo numero di chiamate.
+# La funzione `call_cluster_agent` ha una logica di retry. Per testarla, non basta un `side_effect` semplice. Serve un `side_effect` che cambi comportamento dopo un certo numero di chiamate.
 class TestBaseClusterAgent:
     # ...
     @pytest.mark.asyncio
@@ -1454,8 +1451,7 @@ class TestBaseClusterAgent:
     async def test_call_cluster_agent_success_after_retries(self, ...):
         # ... (setup iniziale dell'agente) ...
         
-        # Creiamo una funzione che fungerà da `side_effect`. Questa funzione ha uno stato interno
-        # (un contatore di chiamate) che le permette di comportarsi diversamente a ogni chiamata.
+        # Creiamo una funzione che fungerà da `side_effect`. Questa funzione ha uno stato interno (un contatore di chiamate) che le permette di comportarsi diversamente a ogni chiamata.
         def side_effect_a_invoke(content):
             # Le prime due volte, solleva un'eccezione per simulare un fallimento.
             if side_effect_a_invoke.call_count < 2:
@@ -1476,22 +1472,17 @@ class TestBaseClusterAgent:
             assert mock_a_invoke.call_count == 3  # 2 fallimenti + 1 successo
             assert "error" not in json.loads(result) # Il risultato finale deve essere di successo.
 
-        # PERCHÉ È IMPORTANTE: Questo è il modo più potente e flessibile per testare
-        # logiche complesse come retry, circuit breaker o state machine. L'uso di una
-        # funzione con stato come `side_effect` permette di simulare qualsiasi sequenza
-        # di eventi (fallimenti, timeout, successi parziali, ecc.).
+        # PERCHÉ È IMPORTANTE: Questo è il modo più potente e flessibile per testare logiche complesse come retry, circuit breaker o state machine. L'uso di una funzione con stato come `side_effect` permette di simulare qualsiasi sequenza di eventi (fallimenti, timeout, successi parziali, ecc.).
+
 
 # [CASO STUDIO 4: Testare la trasformazione dei dati post-chiamata]
-# Questo test non si limita a verificare che l'agente chiami una dipendenza, ma controlla
-# che il risultato restituito dalla dipendenza venga correttamente manipolato/trasformato
-# prima di essere restituito.
+# Questo test non si limita a verificare che l'agente chiami una dipendenza, ma controlla che il risultato restituito dalla dipendenza venga correttamente manipolato/trasformato prima di essere restituito.
 class TestBaseClusterAgent:
     # ...
     @pytest.mark.asyncio
     @patch(...)
     async def test_call_cluster_agent_handles_not_found_checking_result(self, ...):
-        # ARRANGE: Prepariamo una risposta fittizia dall'agente LLM in cui il
-        # `checking_result` è "Not Found".
+        # ARRANGE: Prepariamo una risposta fittizia dall'agente LLM in cui il `checking_result` è "Not Found".
         not_found_response = json.dumps({
             "commercial_conditions_details": {
                 "1": {
@@ -1509,14 +1500,125 @@ class TestBaseClusterAgent:
             result = await agent.call_cluster_agent()
             
             # ASSERT: Verifichiamo la trasformazione.
-            # La logica di business di `call_cluster_agent` prevede che se il risultato è "Not Found",
-            # il campo `extracted_information` debba essere impostato a `None`.
+            # La logica di business di `call_cluster_agent` prevede che se il risultato è "Not Found", il campo `extracted_information` debba essere impostato a `None`.
             # Questo test verifica specificamente questa regola di trasformazione.
             file_data = json.loads(result)["commercial_conditions_details"]["1"]["test_contract.pdf"]
             assert file_data["extracted_information"] is None
-        
-        # PERCHÉ È IMPORTANTE: Molte funzioni non si limitano a passare dati, ma li
-        # puliscono, li arricchiscono o li trasformano. È fondamentale avere test
-        # specifici che verifichino queste regole di business per garantire l'integrità
-        # dei dati lungo tutta la pipeline di esecuzione.
+```
+
+## Test del DB
+
+### Unit Test o Integration Test?
+
+Questo file si colloca in una zona grigia, ma pende decisamente verso l'**Integration Test**.
+
+*   **Perché è un Integration Test**: I test non mockano il database. Usano una vera istanza di PostgreSQL (`db_manager`) per verificare che i metodi della classe `CRUD` interagiscano correttamente con un database reale. Si testa l'integrazione tra la logica applicativa (`CRUD`) e il sistema di persistenza (il database PostgreSQL).
+*   **Perché ha elementi di Unit Test**: Il database viene resettato prima di ogni esecuzione e ogni test è avvolto in una transazione che viene annullata (`rollback`). Questo garantisce un **isolamento** completo tra i singoli test, una caratteristica tipica degli unit test. Non ci sono dipendenze da dati preesistenti nel DB.
+
+In sintesi, è un **integration test a livello di componente**, che testa l'integrazione tra il codice e il DB in un ambiente controllato e isolato.
+
+```python
+# [CASO STUDIO 1: Fixture per la gestione della connessione al database]
+# Questa fixture è il cuore di tutti i test in questo file.
+@pytest.fixture()
+def db_manager():
+    """Fornisce un DBManager connesso a un database di test."""
+    # Legge l'URL del database da una variabile d'ambiente, con un fallback
+    # a un'istanza locale. Questo rende i test flessibili per essere eseguiti
+    # sia localmente che in un ambiente di CI (Continuous Integration).
+    db_url = os.getenv("DATABASE_URL", "postgresql+psycopg://...")
+
+    manager = DBManager(db_url)
+    
+    # SETUP: Prima di iniziare i test, si assicura che il database sia pulito e
+    # che lo schema (tabelle, ecc.) sia aggiornato all'ultima versione del modello dati.
+    # Questo garantisce uno stato di partenza noto e consistente per ogni test run.
+    SQLModel.metadata.drop_all(manager.engine)
+    SQLModel.metadata.create_all(manager.engine)
+
+    # `yield` è la parola chiave che trasforma una funzione in un generatore.
+    # In una fixture, tutto ciò che viene prima di `yield` è il SETUP.
+    # Il valore "yieldato" (in questo caso `manager`) è ciò che viene passato al test.
+    yield manager
+
+    # TEARDOWN: Il codice dopo `yield` viene eseguito alla fine del test.
+    # In questo caso, non c'è pulizia qui perché viene gestita da un'altra fixture.
+
+# [CASO STUDIO 2: Fixture con `autouse=True` per la gestione delle transazioni]
+# Questa è una tecnica avanzata e potentissima per garantire l'isolamento dei test del database.
+@pytest.fixture(autouse=True)
+def _transactional_tests(db_manager):
+    """Avvolge ogni test in una transazione che viene annullata alla fine."""
+    # `autouse=True` significa che questa fixture viene eseguita automaticamente
+    # per OGNI test in questo file, senza bisogno di richiederla come argomento.
+    
+    # SETUP:
+    # 1. Apre una singola connessione al DB per la durata del test.
+    connection = db_manager.engine.connect()
+    # 2. Avvia una transazione "esterna".
+    outer_tx = connection.begin()
+
+
+    # [TECNICA AVANZATA: Monkey-Patching di un'istanza]
+    # Sovrascrive temporaneamente il metodo `get_session` del `db_manager`.
+    # La nuova versione non apre una nuova connessione, ma crea una "transazione nidificata" (un SAVEPOINT SQL) all'interno della transazione esterna già aperta.
+    # Questo fa sì che le operazioni di `session.commit()` all'interno del codice CRUD non vengano scritte permanentemente sul disco, ma solo nel savepoint.
+    db_manager.get_session = _get_session_con_savepoint # Semplificazione del nome
+
+    try:
+        # Esegue il codice del test.
+        yield
+    finally:
+        # TEARDOWN:
+        # Annulla la transazione esterna. Questo cancella TUTTE le modifiche
+        # fatte durante il test (inclusi i commit nei savepoint), riportando
+        # il database allo stato esatto in cui si trovava prima del test.
+        outer_tx.rollback()
+        connection.close()
+
+    # PERCHÉ È FONDAMENTALE: Questo pattern garantisce che ogni test parta da un
+    # database vuoto e non lasci "sporcizia" per i test successivi. È il modo
+    # migliore per avere test di database veloci, affidabili e indipendenti.
+
+
+# [CASO STUDIO 3: Testare vincoli di integrità del database]
+# Questo test non verifica solo la logica Python, ma anche i vincoli definiti
+# a livello di schema del database (es. un campo `UNIQUE`).
+def test_create_commercial_condition_duplicate_raises(crud):
+    """Verifica che la creazione di un record con un ID duplicato sollevi un'eccezione."""
+    # ARRANGE: Crea un primo record con un certo ID.
+    crud.create_commercial_condition(condition_id=20, ...)
+
+    # ACT & ASSERT: Tenta di creare un secondo record con lo STESSO ID.
+    # Il codice CRUD cattura l'`IntegrityError` del database (causato dal vincolo UNIQUE)
+    # e lo rilancia come un'eccezione personalizzata `IntegrityException`.
+    # Il test verifica che questa eccezione venga correttamente sollevata.
+    with pytest.raises(IntegrityException):
+        crud.create_commercial_condition(condition_id=20, ...)
+
+
+# [CASO STUDIO 4: Testare logica dipendente dal tempo modificando i dati direttamente]
+# Questo test deve verificare una funzione che opera su record "vecchi".
+# Invece di usare `time.sleep()`, che renderebbe il test lento, si modifica
+# direttamente il timestamp del record nel database.
+def test_update_running_check_sessions(crud, db_manager):
+    """Verifica che le sessioni in stato RUNNING "vecchie" vengano marcate come FAILED."""
+    # ARRANGE: Crea una sessione di test.
+    cs = crud.create_check_session("user1", [1], ["doc"], "Session")
+
+    # MANIPOLAZIONE DIRETTA DEL DB:
+    # Si ottiene una sessione diretta al database per modificare il record appena creato.
+    with db_manager.get_session() as session:
+        obj = session.get(type(cs), cs.id)
+        # Si imposta il timestamp di creazione a 30 minuti nel passato.
+        obj.created_at = datetime.now() - timedelta(minutes=30)
+        session.commit() # Questo commit scrive solo nel savepoint della transazione
+
+    # ACT: Si chiama la funzione che deve trovare e aggiornare i record "vecchi".
+    crud.update_running_check_sessions("user1")
+
+    # ASSERT: Si verifica che lo stato del record sia stato effettivamente cambiato in FAILED.
+    updated = crud.get_check_session("user1", cs.id)
+    assert updated.state == CheckSessionState.FAILED
+
 ```
