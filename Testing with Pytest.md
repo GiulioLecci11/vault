@@ -1506,6 +1506,132 @@ class TestBaseClusterAgent:
             assert file_data["extracted_information"] is None
 ```
 
+
+## Nuovi test del baseClusterAgent
+
+A seguito di un confronto con FedeRaffo i test sono stati migliorati notevolmente, ecco le modifiche più importanti:
+### Differenze Chiave rispetto alla Versione Precedente
+
+1.  **Fixture Centralizzata (`mock_dependencies`)**: La differenza più grande e importante. Invece di avere una lunga lista di decoratori `@patch` su ogni funzione di test, tutte le dipendenze comuni sono state raggruppate in un'unica fixture. Questo rende i test molto più puliti e conformi al principio DRY (Don't Repeat Yourself).
+2.  **Parametrizzazione per Scenari**: I test sono stati riorganizzati per usare `@pytest.mark.parametrize` in modo più efficace. Invece di avere un test separato per ogni tipo di fallimento (es. `test_init_fails_on_azure_error`, `test_init_fails_on_cc_service_error`), ora c'è un unico `test_init_failures` che testa tutti gli scenari di errore. Questo riduce drasticamente la duplicazione del codice.
+3.  **Test Meno "Fragili"**: Le asserzioni sono diventate più generiche e focalizzate sullo scopo. Ad esempio, invece di verificare l'esatta stringa di un prompt (`assert result == "HEADER\n- # Commercial ..."`), i nuovi test verificano solo che le parti importanti siano presenti (`assert "### START PAGE 1 ###" in result`). Questo rende i test meno "fragili": se un domani si cambia una piccola parte del testo del prompt, il test non fallirà inutilmente.
+4.  **Riduzione del Codice**: Complessivamente, il file è molto più corto e conciso pur testando le stesse logiche. Questo è un grande vantaggio in termini di manutenibilità.
+
+---
+### Nuovi Casi Studio e Tecniche Avanzate
+
+```python
+# [CASO STUDIO 1: Fixture Centralizzata per le Dipendenze]
+# Questa è la tecnica più importante introdotta in questa versione. Invece di usare molteplici decoratori `@patch` su ogni funzione di test, tutte le dipendenze comuni vengono mockate all'interno di un'unica fixture usando il context manager `with`.
+
+@pytest.fixture
+def mock_dependencies(self):
+    """Fixture che fornisce tutte le dipendenze comuni già mockate."""
+    # Il costrutto `with` permette di impilare più context manager (in questo caso, i patch) in modo molto più leggibile rispetto ai decoratori multipli.
+    with (
+        patch("...settings") as mock_settings,
+        patch("...AzureOpenAIClient") as mock_azure,
+        patch("...CommercialConditionsService") as mock_cc_service,
+        patch("...PromptsService") as mock_prompts_service,
+        patch("...Agent.__init__") as mock_agent_init,
+    ):
+        # All'interno del `with`, tutti i patch sono attivi. Qui si può fare il setup comune a tutti i test che useranno questa fixture.
+        mock_settings.azure_openai.azure_openai_api_key = "test_key"
+        # ... (altro setup comune) ...
+
+        # La fixture restituisce un dizionario contenente tutti i mock.
+        # Questo permette ai test di accedere al mock di cui hanno bisogno in modo esplicito e leggibile
+        # (es. `mock_dependencies["azure_client"]`).
+        yield {
+            "settings": mock_settings,
+            "azure_client": mock_azure,
+            "cc_service": mock_cc_service,
+            "prompts_service": mock_prompts_service,
+            "agent_init": mock_agent_init,
+        }
+    # Quando la fixture termina (dopo che il test è stato eseguito), il blocco `with`si chiude e tutti i patch vengono automaticamente rimossi.
+
+
+# [CASO STUDIO 2: Parametrizzazione per Scenari Complessi]
+# Questo approccio usa `@parametrize` per testare diversi "scenari" logici,
+# ciascuno descritto da un dizionario. Questo è un modo elegante per testare
+# più rami di una funzione complessa con un solo test.
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "scenario", # Il test riceverà un intero dizionario `scenario` per ogni esecuzione.
+    [
+        # Ogni dizionario definisce un caso di test completo: un nome, l'input (la risposta dell'agente) e il risultato atteso (se deve fallire e quanti tentativi deve fare).
+        {
+            "name": "success_first_attempt",
+            "agent_response": {"commercial_conditions_details": {...}},
+            "should_fail": False,
+            "retries": 1,
+        },
+        {
+            "name": "json_decode_error",
+            "agent_response": "Invalid JSON", # Qui l'input è una stringa non JSON
+            "should_fail": True,
+            "retries": 5,
+        },
+        {
+            "name": "validation_error",
+            "agent_response": {"wrong_structure": "invalid"}, # Qui è JSON valido ma con la struttura sbagliata
+            "should_fail": True,
+            "retries": 5,
+        },
+    ],
+)
+async def test_call_cluster_agent(self, mock_dependencies, sample_doc, scenario):
+    """Testa la chiamata all'agente cluster con diversi scenari di successo e fallimento."""
+    # ... (setup dell'agente) ...
+    
+    # La logica del test viene adattata in base ai parametri dello scenario corrente.
+    if scenario["name"] == "success_first_attempt":
+        # ...
+        result = await agent.call_cluster_agent()
+        # ...
+        assert "error" not in result_dict
+    
+    elif scenario["should_fail"]:
+        # ...
+        result = await agent.call_cluster_agent()
+        # ...
+        assert "error" in result_dict
+        assert mock_invoke.call_count == scenario["retries"]
+
+
+# [CASO STUDIO 3: Asserzioni Robuste e Meno "Fragili"]
+# Invece di confrontare stringhe intere, si verifica la presenza di sottostringhe chiave.
+# Questo rende i test meno suscettibili a fallire per cambiamenti non importanti.
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        {
+            "name": "single_page_single_line",
+            "input": {...},
+            "expected_contains": [ # Invece di un'unica stringa gigante...
+                "### START PAGE 1 ###",
+                "Test content",
+                "### END PAGE 1 ###",
+            ],
+        },
+        # ...
+    ],
+)
+def test_create_content(self, mock_dependencies, test_case):
+    # ... (setup) ...
+    result = agent._create_content(test_case["input"])
+
+    # ... si itera sulla lista di sottostringhe attese.
+    for expected_content in test_case["expected_contains"]:
+        assert expected_content in result
+
+# PERCHÉ È IMPORTANTE: Un test "fragile" (brittle) è un test che fallisce a causa
+# di cambiamenti irrilevanti nel codice sorgente (es. aggiungere uno spazio in più).
+# Verificare la presenza di "landmark" nel risultato (`in`) invece di una corrispondenza esatta (`==`) rende il test più robusto e focalizzato sulla correttezza della struttura piuttosto che sui dettagli insignificanti della formattazione.
+```
+
 ## Test del DB
 
 ### Unit Test o Integration Test?
@@ -1513,6 +1639,7 @@ class TestBaseClusterAgent:
 Questo file si colloca in una zona grigia, ma pende decisamente verso l'**Integration Test**.
 
 *   **Perché è un Integration Test**: I test non mockano il database. Usano una vera istanza di PostgreSQL (`db_manager`) per verificare che i metodi della classe `CRUD` interagiscano correttamente con un database reale. Si testa l'integrazione tra la logica applicativa (`CRUD`) e il sistema di persistenza (il database PostgreSQL).
+
 *   **Perché ha elementi di Unit Test**: Il database viene resettato prima di ogni esecuzione e ogni test è avvolto in una transazione che viene annullata (`rollback`). Questo garantisce un **isolamento** completo tra i singoli test, una caratteristica tipica degli unit test. Non ci sono dipendenze da dati preesistenti nel DB.
 
 In sintesi, è un **integration test a livello di componente**, che testa l'integrazione tra il codice e il DB in un ambiente controllato e isolato.
@@ -1621,4 +1748,206 @@ def test_update_running_check_sessions(crud, db_manager):
     updated = crud.get_check_session("user1", cs.id)
     assert updated.state == CheckSessionState.FAILED
 
+```
+
+## Test del file handler
+
+Questo interagisce pesantemente col file system
+### Unit Test o Integration Test?
+
+Questo file contiene un mix di **Unit Test** e **Integration Test**, ben distinti tra loro:
+
+*   **Unit Test**: La maggior parte dei test (`test_upload_file_scenarios`, `test_load_docs_preserve_originals_success`, ecc.) sono unit test puri. Mockano tutte le interazioni con il file system (`aiofiles`), i comandi esterni (i metodi di conversione) e le dipendenze esterne (`_parse_document`).
+
+*   **Integration Test**: I test come `test_convert_docx_to_pdf` e `test_upload_file_filesystem_integration` sono chiaramente integration test. Il primo testa l'integrazione con un'applicazione esterna (LibreOffice), mentre il secondo testa l'interazione con il file system reale. Sono stati isolati e marcati implicitamente come tali.
+
+---
+
+### Nuovi Casi Studio e Tecniche Avanzate
+
+```python
+# [CASO STUDIO 1: Fixture complesse per gestire risorse esterne (file system)]
+# Questa classe di test utilizza fixture molto elaborate per gestire una risorsa esterna come il file system in modo pulito e riutilizzabile.
+
+@pytest.fixture
+def temp_dir(self):
+    """Crea una directory temporanea per l'intera suite di test."""
+    # `tempfile.mkdtemp()` crea una directory univoca e sicura.
+    temp_dir = tempfile.mkdtemp()
+    # `yield` fornisce il percorso della directory ai test che la richiedono.
+    yield temp_dir
+    # FASE DI TEARDOWN (pulizia):
+    # Dopo che il test è terminato, la directory e tutto il suo contenuto vengono
+    # rimossi, garantendo che i test non lascino file spazzatura sul sistema.
+    import shutil
+    if os.path.exists(temp_dir):
+        shutil.rmtree(temp_dir)
+        
+# PERCHÉ È IMPORTANTE: Questa fixture garantisce che i test che necessitano di scrivere su disco lo facciano in un ambiente isolato e pulito, senza rischio di conflitti o di inquinare il sistema.
+
+
+@pytest.fixture
+def mock_aiofiles(self):
+    """Fixture centralizzata per mockare `aiofiles.open`."""
+    # `aiofiles.open` è una libreria per operazioni asincrone sui file. Poiché restituisce un context manager asincrono (`async with`), il suo mock deve essere più complesso.
+    with patch("aiofiles.open") as mock_aiofiles_open:
+        # Si crea un mock per il context manager...
+        mock_file_context = AsyncMock()
+        # ...e un mock per l'handle del file che viene restituito all'ingresso del `with`.
+        mock_file_handle = AsyncMock()
+        
+        # Si configurano i metodi "magici" per il context manager asincrono.
+        mock_file_context.__aenter__ = AsyncMock(return_value=mock_file_handle)
+        mock_file_context.__aexit__ = AsyncMock(return_value=None)
+        
+        # `aiofiles.open()` ora restituirà il nostro context manager fittizio.
+        mock_aiofiles_open.return_value = mock_file_context
+        
+        # Per comodità, aggiungiamo un riferimento all'handle del file direttamente sul mock principale, così i test possono accedervi facilmente per verificare le chiamate a `write()`.
+        mock_aiofiles_open.file_handle = mock_file_handle
+        yield mock_aiofiles_open
+
+# Questo mostra la tecnica corretta per mockare costrutti asincroni
+# complessi come i context manager, che sono molto comuni quando si lavora con I/O.
+
+
+# [CASO STUDIO 2: Fixture che forniscono funzionalità (helper functions)]
+# Una fixture non deve per forza restituire solo dati o mock. Può anche fornire
+# funzioni helper che i test possono usare per preparare il loro ambiente.
+
+@pytest.fixture
+def clean_session(self, file_handler):
+    """Fixture che prepara una directory di sessione pulita e fornisce un helper per creare file."""
+    # SETUP: Pulisce e ricrea la directory di sessione prima di ogni test.
+    # ...
+    
+    # Questa è la funzione helper che la fixture fornirà al test.
+    def create_test_files(files_dict):
+        """Crea file di test nella directory di sessione."""
+        for filename, content in files_dict.items():
+            # ... (logica per scrivere il file) ...
+        return created_files
+    
+    # La fixture "yielda" una tupla contenente sia dati (il percorso) sia la funzione helper.
+    yield file_handler.session_path, create_test_files
+    
+    # TEARDOWN: Pulisce la directory dopo il test.
+    # ...
+
+# Esempio di utilizzo nel test:
+ def test_load_docs_preserve_originals_success(self, file_handler, clean_session, ...):
+     # Il test "spacchetta" la tupla restituita dalla fixture.
+     session_path, create_files = clean_session
+     # E usa la funzione helper per creare i file necessari per il test.
+     created_files = create_files({"doc1.pdf": "Content 1"})
+
+
+# [CASO STUDIO 3: Metodi helper all'interno della classe di test]
+# Simile alla fixture che fornisce una funzione, si possono definire metodi helper direttamente nella classe di test per incapsulare logiche di verifica ripetitive.
+
+class TestFileHandler:
+    
+    def _verify_file_creation_and_size(self, file_path: str, min_size: int = 1):
+        """Helper per verificare che un file esista e non sia vuoto."""
+        assert os.path.exists(file_path), ...
+        assert os.path.getsize(file_path) >= min_size, ...
+
+    # Questa funzione helper può essere poi richiamata da più test.
+    async def _test_conversion_method(self, ...):
+        # ...
+        self._verify_file_creation_and_size(test_path)
+        # ...
+
+
+# [CASO STUDIO 4: Gestire test che dipendono da software esterno (pytest.skip)]
+# I test `test_convert_docx_to_pdf` e `test_convert_doc_to_pdf` sono veri
+# integration test che dipendono dalla presenza di LibreOffice sulla macchina.
+
+class TestFileHandler:
+    # ...
+    async def _test_conversion_method(self, ...):
+        try:
+            # ... (esegue la conversione reale) ...
+        except ConversionError as e:
+            # Se la conversione fallisce perché LibreOffice non è installato,
+            # il test non deve fallire, ma deve essere "saltato".
+            if "LibreOffice not available" in str(e):
+                pytest.skip("LibreOffice not available for real conversion test")
+            else:
+                raise # Se l'errore è un altro, il test deve fallire.
+
+# PERCHÉ È IMPORTANTE: `pytest.skip()` è una funzione che dice al test runner di
+# interrompere l'esecuzione del test corrente e marcarlo come "skipped" (saltato)
+# invece che "failed" (fallito). Questo è fondamentale per i test di integrazione
+# che dipendono da servizi o software esterni che potrebbero non essere disponibili in tutti gli ambienti (es. sulla macchina di un altro sviluppatore o in certi container di CI). Permette alla suite di test di completarsi con successo anche se alcuni test di integrazione non possono essere eseguiti.
+```
+
+### Integration test parts deep dive
+
+```python
+    # [TECNICA: Test di integrazione con software esterno]
+    # Questo test verifica l'integrazione reale con l'applicazione LibreOffice.
+    # Non mocka la conversione, ma la esegue davvero. Per questo motivo,
+    # è un test di integrazione, più lento e dipendente dall'ambiente rispetto
+    # a un unit test.
+    @pytest.mark.asyncio
+    async def test_convert_docx_to_pdf(self, file_handler):
+        """Testa la conversione da DOCX a PDF usando il vero LibreOffice."""
+        # ARRANGE:
+        # 1. Si crea un oggetto Documento DOCX in memoria usando la libreria `python-docx`.
+        # Questo evita di dover avere un file .docx fisico nel repository del codice.
+        doc = Document()
+        doc.add_heading("Test Document", 0)
+        doc.add_paragraph("Test paragraph for DOCX to PDF conversion.")
+        doc.add_paragraph("Conversion should preserve the original DOCX file.")
+
+        # ACT & ASSERT:
+        # 2. Si chiama il metodo helper `_test_conversion_method`. Questo helper
+        #    incapsula tutta la logica di esecuzione e verifica, rendendo il
+        #    corpo del test estremamente pulito e leggibile. 
+        
+        # L'helper si occuperà di:
+        #    - Salvare il documento DOCX in memoria su un file temporaneo.
+        #    - Chiamare il metodo `_convert_docx_to_pdf` della classe FileHandler.
+        #    - Verificare che il file PDF sia stato creato correttamente.
+        #    - Verificare che il file DOCX originale sia stato preservato.
+        #    - Gestire il `pytest.skip` se LibreOffice non è disponibile.
+        await self._test_conversion_method(
+            file_handler, "_convert_docx_to_pdf", "test_document.docx", doc
+        )
+
+    # [TECNICA: Test di integrazione con il file system]
+    # Questo test verifica che la classe `FileHandler` scriva correttamente i file sul disco. A differenza di altri test che mockano `aiofiles`, qui si
+    # interagisce con il vero file system, ma in un ambiente controllato
+    # fornito dalla fixture `clean_session`.
+    @pytest.mark.asyncio
+    async def test_upload_file_filesystem_integration(
+        self, file_handler, mock_file, clean_session
+    ):
+        """Test di integrazione che verifica le operazioni reali sul file system."""
+        # ARRANGE:
+        # 1. Si ottengono il percorso della directory di sessione pulita e la funzione helper per creare file dalla fixture `clean_session`. In questo specifico test, la funzione helper non viene usata, ma la fixture garantisce che la directory `session_path` sia vuota e pronta per il test.
+        session_path, create_files = clean_session
+
+        # 2. Si definisce il contenuto del file fittizio che verrà "caricato".
+        test_content = b"Real PDF content"
+        # 3. Si crea un mock di `UploadFile` (come farebbe FastAPI) usando la fixture `mock_file`.
+        test_file = mock_file("integration.pdf", test_content)
+
+        # ACT:
+        # 4. Si chiama il metodo `upload_file`. Questo metodo, in uno unit test, avrebbe la sua chiamata a `aiofiles.open` mockata. Qui invece, poiché `aiofiles` non è mockato, eseguirà l'operazione reale di scrittura su disco.
+        result = await file_handler.upload_file(test_file)
+        
+        # ASSERT:
+        # 5. Si verifica che il nome del file restituito sia corretto.
+        assert result == "integration.pdf"
+
+        # 6. Si verifica lo stato del file system.
+        file_path = os.path.join(session_path, "integration.pdf")
+        #    - Il file esiste nel percorso atteso?
+        assert os.path.exists(file_path)
+        #    - Il contenuto del file scritto su disco corrisponde esattamente
+        #      a quello che abbiamo passato?
+        with open(file_path, "rb") as f:
+            assert f.read() == test_content
 ```
