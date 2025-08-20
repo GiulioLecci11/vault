@@ -187,3 +187,9 @@ Se da errore di version non trovata, è perchè nella tabella `alembic_version`,
 ## In sintesi:
 
 Alembic è lo strumento standard per le migrazioni di schema nei progetti Python che usano SQLAlchemy. Ti consente di gestire in modo ordinato e sicuro le modifiche al database nel tempo.
+
+### New handmade revision
+
+Considerando che alembic mette nel nome delle revision, oltre la data in cui è stata creata ed il messaggio che ne specifica l'utilizzo, anche un alfanumerico identificativo (probabilmente un hashing o qualcosa di simile); per creare una nuova revisione ed essere sicuri che ciò venga rispettato si può usare il comando
+`alembic revision —autogenerate -m “nome revisione”` 
+Poi va modificato **a mano** il contenuto della revisione per far fare ciò che vogliamo
