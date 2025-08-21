@@ -219,4 +219,4 @@ La scelta tra i due dipende interamente dal caso d'uso: per risposte conversazio
 *   **Fonte 2 (OpenAI Deep Research Cookbook):** [https://cookbook.openai.com/examples/deep_research_api/introduction_to_deep_research_api](https://cookbook.openai.com/examples/deep_research_api/introduction_to_deep_research_api)
 *   **Fonte 3 (Google Grounding Docs):** [https://ai.google.dev/gemini-api/docs/google-search](https://ai.google.dev/gemini-api/docs/google-search)
 
-#AI 
+#dpKnowledge 
