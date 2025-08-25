@@ -59,7 +59,7 @@ BM42 si basa su SPLADE ma cerca di combinare il meglio di BM25 e dei trasformer:
     
     - Utilizza la tokenizzazione nativa del transformer per ottenere i vettori di attenzione
     - Inverte poi il processo, riunendo i sottotermini in parole complete
-    - Applica tecniche NLP tradizionali come rimozione delle stopwords e lemmatizzazione ([[Lemming NLP]])
+    - Applica tecniche NLP tradizionali come rimozione delle stopwords e lemmatizzazione ([[Lemming & Stemming NLP]])
 
 La formula semplificata di BM42 diventa: Score(D,Q) = Somma per tutti i termini (IDF(termine) × Attenzione(CLS, termine)).
 
