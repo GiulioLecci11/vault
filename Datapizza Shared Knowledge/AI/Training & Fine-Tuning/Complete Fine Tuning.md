@@ -1,4 +1,4 @@
-Questa tecnica aggiorna **tutti i parametri** del modello. È la forma più potente ma anche la più costosa in termini computazionali; può comportare rischi come l’overfitting o il [[Catastrophic Forgetting]], dove il modello dimentica le conoscenze apprese in precedenza.
+Questa tecnica aggiorna **tutti i parametri** del modello. È la forma più potente ma anche la più costosa in termini computazionali; può comportare rischi come l’overfitting o il Catastrophic Forgetting, dove il modello dimentica le conoscenze apprese in precedenza.
 
 ## Pro
 

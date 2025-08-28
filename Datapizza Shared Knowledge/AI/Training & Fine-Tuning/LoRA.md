@@ -91,7 +91,7 @@ Dopo il training:
 
 ## Dettagli
 
-- Il **[[Rango matriciale]]** delle due matrici che introduci è un iperparametro che va a definire quanti pesi originali del modello vai a modificare. Maggiore è il rango maggiore è il numero di parametri che modifichi.
+- Il **Rango matriciale** delle due matrici che introduci è un iperparametro che va a definire quanti pesi originali del modello vai a modificare. Maggiore è il rango maggiore è il numero di parametri che modifichi.
 
 |Rank|7B|13B|70B|180B|
 |---|---|---|---|---|

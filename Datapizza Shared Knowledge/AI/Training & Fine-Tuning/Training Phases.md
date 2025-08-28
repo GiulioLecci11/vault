@@ -1,9 +1,9 @@
 L’addestramento di un LLM moderno si articola in più fasi distinte:
 
-1. [[Raw Model]]
-2. [[Pre-Training]]
-3. [[Supervised Fine Tuning]]
-4. [[Alignment (RLHF)]]
+1. Raw Model
+2. Pre-Training
+3. Supervised Fine Tuning
+4. Alignment (RLHF)
 
 Ogni fase ha uno scopo preciso e richiede dati diversi.
 

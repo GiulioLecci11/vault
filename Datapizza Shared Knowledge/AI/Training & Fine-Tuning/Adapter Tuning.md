@@ -9,7 +9,7 @@ Invece di modificare tutti i pesi del modello, si **inseriscono piccoli moduli**
 
 - **Efficienza computazionale**: meno parametri da aggiornare = meno memoria e tempo di addestramento
 - **Modularità**: è possibile usare diversi adapter per diversi compiti, riutilizzando lo stesso modello base
-- **Compatibilità**: evita il rischio di [[Catastrophic Forgetting]] perché non si alterano i pesi originali
+- **Compatibilità**: evita il rischio di Catastrophic Forgetting perché non si alterano i pesi originali
 
 ---
 
