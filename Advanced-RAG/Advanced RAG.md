@@ -1,7 +1,7 @@
 [[Agentic RAG]]
 [[Graph RAG]]
 [[Hackapizza]]
-[[Hierarchical RAG]]
+[[remote-vault/Advanced-RAG/Hierarchical RAG]]
 [[Query Rewriting & Reranking]]
 
 #main

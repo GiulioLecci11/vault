@@ -23,7 +23,7 @@ Perciò si definisce un modello di Reward (un LM) che è il più possibile allin
     
     $$ P:I(prompt)\rightarrow O(text) $$
     
-    2. La risposta di $P$ viene valutata da $R$, si calcola una ricompensa e si aggiorna $P$ usando [[PPO]] per massimizzare la ricompensa.
+    1. La risposta di $P$ viene valutata da $R$, si calcola una ricompensa e si aggiorna $P$ usando PPO per massimizzare la ricompensa.
         ![[Pasted image 20250828101621.png]]
         
 2. Il modello finale (Instruct) sarà il policy model, quello di partenza non viene mai toccato
@@ -37,7 +37,7 @@ Prompt --> LLM --> Risposta A/B --> Voto umano --> Reward model --> LLM (ottimiz
 
 ## Output:
 
-- [[Instruct Models]]
+- Instruct Models
 
 ## Tecniche alternative al RLHF
 
