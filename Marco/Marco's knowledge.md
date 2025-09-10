@@ -5,7 +5,7 @@
 file .toml serve per comando uv sync e gestisce le dipendenze
 
   
-[[Docker]]
+[[remote-vault/Miscellaneous/Docker]]
 #Docker:
 ![[ENV UV_COMPILE_BYTECODE-1.png]]
 
