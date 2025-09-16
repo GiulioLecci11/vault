@@ -267,3 +267,5 @@ Il client riceverà una risposta del tipo:
 {"data": {...}}
 {"error_type": "DatabaseException", "message": "Item not found", "stacktrace": "..."}
 ```
+
+#dpKnowledge 
